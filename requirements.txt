@@ -1,0 +1,6 @@
+streamlit
+networkx
+folium
+streamlit-folium
+qrcode
+pillow
