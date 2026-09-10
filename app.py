@@ -1,6 +1,8 @@
 import sys
 import os
-
+@st.cache_data
+def load_street_graph(place_name="Jaipur, Rajasthan, India"):
+    return ox.graph_from_place(place_name, network_type="drive")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(BASE_DIR)
 sys.path.append(os.path.join(BASE_DIR, "router"))
