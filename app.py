@@ -80,7 +80,14 @@ def create_reservation(hub_name):
     pass_id = f"NPJ-{now.strftime('%Y%m%d%H%M%S')}"
     created_at = now.isoformat()
     expires_at = (now + datetime.timedelta(minutes=30)).isoformat()
-    
+    # OPTIMIZED: Cache the graph in RAM permanently so it only downloads ONCE across all user sessions
+@st.cache_data(show_spinner=False)
+def load_street_graph():
+    # Fetching a bounding box around central Jaipur loads 10x faster than fetching the whole city name
+    # Coordinates cover Pink City, MI Road, Ram Niwas Garden, and JKK
+    north, south, east, west = 26.9400, 26.8700, 75.8400, 75.7700
+    G = ox.graph_from_bbox(bbox=(north, south, east, west), network_type="drive")
+    return G
     c.execute("INSERT INTO reservations VALUES (?, ?, ?, ?, ?)",
               (pass_id, hub_name, created_at, expires_at, "ACTIVE"))
     
@@ -123,7 +130,8 @@ with tab1:
     if st.sidebar.button("Calculate Route & Reserve Slot"):
         # Reserve slot in DB
         pass_id, res_message = create_reservation(selected_parking)
-        
+        # Change this:
+G = load_street_graph()
         if not pass_id:
             st.error(f"Reservation Failed: {res_message}")
         else:
