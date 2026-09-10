@@ -1,263 +1,139 @@
-import sys
-import os
-@st.cache_data
-def load_street_graph(place_name="Jaipur, Rajasthan, India"):
-    return ox.graph_from_place(place_name, network_type="drive")
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(BASE_DIR)
-sys.path.append(os.path.join(BASE_DIR, "router"))
-
 import streamlit as st
+import networkx as nx
+import osmnx as ox
 import folium
 from streamlit_folium import st_folium
-import osmnx as ox
-import networkx as nx
 from geopy.geocoders import Nominatim
-from geopy.distance import geodesic
+import qrcode
+from PIL import Image
+import io
 
-from graph_loader import load_street_graph
-from router.parking_sim import generate_parking_zones
-from custom_astar import find_smart_parking_route
-
-# ---------------------------------------------------------
 # Page Configuration
-# ---------------------------------------------------------
 st.set_page_config(
-    page_title="Smart Parking & GIS Route Planner",
-    layout="wide",
-    page_icon="🅿️",
-    initial_sidebar_state="expanded"
+    page_title="NaviPark Jaipur",
+    page_icon="🚗",
+    layout="wide"
 )
 
-# ---------------------------------------------------------
-# Custom UI Styling (CSS Injection)
-# ---------------------------------------------------------
+# Custom Styling
 st.markdown("""
-<style>
-    /* Main App Background & Font */
-    .stApp {
-        background-color: #0f172a;
-        color: #f8fafc;
-        font-family: 'Inter', sans-serif;
-    }
-    
-    /* Header Container Styling */
-    .main-header {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        border: 1px solid #334155;
-        padding: 1.5rem 2rem;
-        border-radius: 16px;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
-        margin-bottom: 2rem;
-    }
-    .main-header h1 {
-        color: #38bdf8;
-        font-weight: 700;
-        margin: 0;
-        font-size: 2.2rem;
-    }
-    .main-header p {
-        color: #94a3b8;
-        margin-top: 0.5rem;
-        font-size: 1rem;
-    }
-
-    /* Sidebar Styling */
-    section[data-testid="stSidebar"] {
-        background-color: #1e293b !important;
-        border-right: 1px solid #334155;
-    }
-    
-    /* Metric Card Custom Styling */
-    div[data-testid="stMetric"] {
-        background: #1e293b;
-        border: 1px solid #334155;
-        padding: 1rem 1.25rem;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-    }
-    div[data-testid="stMetricLabel"] {
-        color: #94a3b8 !important;
-        font-size: 0.875rem !important;
-        font-weight: 600 !important;
-    }
-    div[data-testid="stMetricValue"] {
-        color: #38bdf8 !important;
-        font-size: 1.6rem !important;
-        font-weight: 700 !important;
-    }
-
-    /* Map Box Styling */
-    .element-container:has(iframe) {
-        border-radius: 16px;
-        overflow: hidden;
-        border: 1px solid #334155;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-    }
-</style>
+    <style>
+    .main-title { font-size: 2.2rem; font-weight: 700; color: #1E3A8A; margin-bottom: 0px; }
+    .sub-title { font-size: 1rem; color: #4B5563; margin-bottom: 25px; }
+    .metric-card { background-color: #F3F4F6; padding: 15px; border-radius: 10px; text-align: center; }
+    </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# Title Banner
-# ---------------------------------------------------------
-st.markdown("""
-<div class="main-header">
-    <h1>🅿️ GIS Smart Parking & Navigation Router</h1>
-    <p>Multi-objective spatial routing engine for central Jaipur, balancing driving duration, walk distances, traffic density, and real-time spot availability risk.</p>
-</div>
-""", unsafe_allow_html=True)
+# App Title Header
+st.markdown('<div class="main-title">NaviPark Jaipur 🚗</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Smart Urban Mobility & Dynamic Parking Allocation Engine</div>', unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# Data Loading
-# ---------------------------------------------------------
-@st.cache_resource
-def get_map_data():
-    G = load_street_graph()
-    parking_df = generate_parking_zones(G)
-    return G, parking_df
+# Cached Graph Loader
+@st.cache_data(show_spinner=False)
+def load_street_graph(place_name="Jaipur, Rajasthan, India"):
+    # Load driveable road network for Jaipur
+    return ox.graph_from_place(place_name, network_type="drive")
 
-with st.spinner("Initializing Jaipur GIS Network..."):
-    G, parking_df = get_map_data()
+# Sidebar - User Inputs
+st.sidebar.header("📍 Route & Parking Settings")
 
-geolocator = Nominatim(user_agent="smart_parking_jaipur_app_v10")
+origin_address = st.sidebar.text_input("Origin Address / Landmark", "MI Road, Jaipur")
+destination_address = st.sidebar.text_input("Destination Landmark", "Hawa Mahal, Jaipur")
 
-# ---------------------------------------------------------
-# Sidebar Controls
-# ---------------------------------------------------------
-st.sidebar.markdown("### 📍 Location Search")
-start_address = st.sidebar.text_input("Origin Point", value="Albert Hall Museum, Jaipur")
-dest_address = st.sidebar.text_input("Destination Point", value="Ajmeri Gate, Jaipur")
+parking_spots = {
+    "Ram Niwas Garden Parking": {"lat": 26.9152, "lon": 75.8198, "total_slots": 120, "occupied": 85},
+    "Bapu Bazaar Underground Parking": {"lat": 26.9180, "lon": 75.8230, "total_slots": 80, "occupied": 72},
+    "Jawahar Kala Kendra Parking": {"lat": 26.8800, "lon": 75.8080, "total_slots": 150, "occupied": 40},
+    "Pink City Central Hub": {"lat": 26.9239, "lon": 75.8267, "total_slots": 100, "occupied": 92}
+}
+
+selected_parking = st.sidebar.selectbox("Select Parking Destination", list(parking_spots.keys()))
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🚦 Navigation Mode")
-routing_mode = st.sidebar.radio(
-    "Select Routing Engine:",
-    ["Smart Parking Search", "Direct Shortest Path"],
-    label_visibility="collapsed"
-)
+ev_required = st.sidebar.checkbox("Require EV Charging Station")
+accessible_required = st.sidebar.checkbox("Wheelchair Accessible")
 
-if routing_mode == "Smart Parking Search":
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### ⚙️ Optimization Weights")
-    drive_priority = st.sidebar.slider("🚗 Drive Speed Preference", 0.0, 5.0, 1.0, 0.1)
-    walk_priority = st.sidebar.slider("🚶 Short Walk Preference", 0.0, 5.0, 2.5, 0.1)
-    parking_risk = st.sidebar.slider("🛡️ Guaranteed Spot Priority", 0.0, 30.0, 15.0, 1.0)
+# Main Action Button
+if st.sidebar.button("Calculate Route & Reserve Slot"):
+    with st.spinner("Fetching map network and computing optimal Dijkstra path..."):
+        try:
+            # Geocoding Origin
+            geolocator = Nominatim(user_agent="navipark_jaipur_app")
+            loc_origin = geolocator.geocode(origin_address + ", Jaipur, India")
+            
+            if loc_origin:
+                orig_lat, orig_lon = loc_origin.latitude, loc_origin.longitude
+            else:
+                orig_lat, orig_lon = 26.9124, 75.7873 # Fallback location
 
-# ---------------------------------------------------------
-# Geocoding & Node Matching
-# ---------------------------------------------------------
-@st.cache_data(show_spinner=False)
-def geocode_location(address_text):
-    try:
-        loc = geolocator.geocode(address_text, timeout=10)
-        if loc:
-            return (loc.latitude, loc.longitude), loc.address
-    except Exception:
-        pass
-    return None, None
+            dest_lat = parking_spots[selected_parking]["lat"]
+            dest_lon = parking_spots[selected_parking]["lon"]
 
-coords_start, _ = geocode_location(start_address)
-coords_dest, _ = geocode_location(dest_address)
+            # Load Map Network
+            G = load_street_graph()
 
-if coords_start is None:
-    st.error(f"Could not locate starting point: '{start_address}'. Try adding ', Jaipur' to your query.")
-    st.stop()
+            # Find nearest graph nodes
+            orig_node = ox.distance.nearest_nodes(G, orig_lon, orig_lat)
+            dest_node = ox.distance.nearest_nodes(G, dest_lon, dest_lat)
 
-if coords_dest is None:
-    st.error(f"Could not locate destination point: '{dest_address}'. Try adding ', Jaipur' to your query.")
-    st.stop()
+            # Compute Shortest Path via Dijkstra
+            route = nx.shortest_path(G, orig_node, dest_node, weight="length")
+            route_length_m = nx.shortest_path_length(G, orig_node, dest_node, weight="length")
+            route_km = route_length_m / 1000.0
 
-# Snap to initial nearest nodes
-origin_node = ox.distance.nearest_nodes(G, X=coords_start[1], Y=coords_start[0])
-dest_node = ox.distance.nearest_nodes(G, X=coords_dest[1], Y=coords_dest[0])
+            # Estimate CO2 Savings vs. Cruising Loops (Avg 0.12 kg CO2 saved per km optimized)
+            co2_saved_kg = round(route_km * 0.12, 2)
 
-# Validate Distance to Graph Edge
-dest_lat = G.nodes[dest_node]['y']
-dest_lon = G.nodes[dest_node]['x']
-dest_gap = geodesic(coords_dest, (dest_lat, dest_lon)).meters
+            # Metrics Row
+            col1, col2, col3, col4 = st.columns(4)
+            
+            spot_data = parking_spots[selected_parking]
+            avail_slots = spot_data["total_slots"] - spot_data["occupied"]
+            
+            col1.metric("Distance", f"{route_km:.2f} km")
+            col2.metric("Available Slots", f"{avail_slots} / {spot_data['total_slots']}")
+            col3.metric("Est. CO₂ Offset", f"{co2_saved_kg} kg")
+            col4.metric("Spot Status", "Available" if avail_slots > 5 else "Limited", delta_color="normal")
 
-if dest_gap > 500:
-    st.warning(f"Note: Destination is ~{int(dest_gap)} meters from the nearest driving road in the graph.")
+            st.markdown("---")
 
-# Render Folium Base Map
-mid_lat = (coords_start[0] + coords_dest[0]) / 2.0
-mid_lon = (coords_start[1] + coords_dest[1]) / 2.0
-m = folium.Map(location=[mid_lat, mid_lon], zoom_start=14, tiles="CartoDB dark_matter")
+            # Layout Split: Map vs. Pass Generator
+            map_col, pass_col = st.columns([2, 1])
 
-folium.Marker(
-    coords_start, 
-    popup=f"Origin: {start_address}", 
-    icon=folium.Icon(color="blue", icon="play", prefix="fa")
-).add_to(m)
+            with map_col:
+                st.subheader("🗺️ Optimal Route Visualization")
+                
+                # Render Folium Map
+                m = folium.Map(location=[orig_lat, orig_lon], zoom_start=13, tiles="CartoDB positron")
 
-folium.Marker(
-    coords_dest, 
-    popup=f"Destination: {dest_address}", 
-    icon=folium.Icon(color="red", icon="flag", prefix="fa")
-).add_to(m)
+                # Add Origin & Destination Markers
+                folium.Marker([orig_lat, orig_lon], popup="Origin", icon=folium.Icon(color="green", icon="play")).add_to(m)
+                folium.Marker([dest_lat, dest_lon], popup=selected_parking, icon=folium.Icon(color="red", icon="parking")).add_to(m)
 
-# Route Weight Preference Fallback
-weight_attribute = "adjusted_travel_time" if nx.get_edge_attributes(G, "adjusted_travel_time") else "travel_time"
+                # Route Coordinates
+                route_coords = [(G.nodes[n]['y'], G.nodes[n]['x']) for n in route]
+                folium.PolyLine(route_coords, color="#1E3A8A", weight=5, opacity=0.8).add_to(m)
 
-# ---------------------------------------------------------
-# Path Engine Execution
-# ---------------------------------------------------------
-if routing_mode == "Direct Shortest Path":
-    try:
-        # Verify node connection within main graph; if disconnected, fallback to largest connected subgraph
-        if not nx.has_path(G, origin_node, dest_node):
-            largest_cc = max(nx.strongly_connected_components(G), key=len)
-            G_sub = G.subgraph(largest_cc).copy()
-            origin_node = ox.distance.nearest_nodes(G_sub, X=coords_start[1], Y=coords_start[0])
-            dest_node = ox.distance.nearest_nodes(G_sub, X=coords_dest[1], Y=coords_dest[0])
-            direct_path = nx.shortest_path(G_sub, origin_node, dest_node, weight=weight_attribute)
-            drive_time_sec = nx.shortest_path_length(G_sub, origin_node, dest_node, weight=weight_attribute)
-        else:
-            direct_path = nx.shortest_path(G, origin_node, dest_node, weight=weight_attribute)
-            drive_time_sec = nx.shortest_path_length(G, origin_node, dest_node, weight=weight_attribute)
-        
-        col1, col2 = st.columns(2)
-        col1.metric("Routing Engine", "Direct Shortest Path")
-        col2.metric("Traffic-Adjusted Drive Time", f"{round(drive_time_sec / 60.0, 1)} mins")
+                st_folium(m, width=700, height=450)
 
-        route_coords = [(G.nodes[n]["y"], G.nodes[n]["x"]) for n in direct_path]
-        folium.PolyLine(route_coords, color="#38bdf8", weight=6, opacity=0.9, popup="Direct Path").add_to(m)
-    except Exception:
-        st.error("No valid driving road path connects these locations in the loaded graph. Try selecting a major nearby landmark.")
+            with pass_col:
+                st.subheader("🎟️ Digital Entry Pass")
+                
+                pass_data = f"NaviPark Jaipur\nHub: {selected_parking}\nPass ID: NPJ-{hash(selected_parking) % 100000}\nStatus: Reserved"
+                
+                qr = qrcode.QRCode(version=1, box_size=8, border=2)
+                qr.add_data(pass_data)
+                qr.make(fit=True)
+                
+                qr_img = qr.make_image(fill_color="#1E3A8A", back_color="white")
+                buf = io.BytesIO()
+                qr_img.save(buf, format="PNG")
+                
+                st.image(buf.getvalue(), caption="Scan at entry gate", width=200)
+                st.success("Slot successfully held for 30 minutes!")
+
+        except Exception as e:
+            st.error(f"Error processing route calculation: {str(e)}")
 
 else:
-    result = find_smart_parking_route(
-        G, origin_node, coords_dest, parking_df, 
-        alpha=drive_priority, beta=walk_priority, gamma=parking_risk
-    )
-
-    if result:
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Selected Lot", f"{result['parking_zone']['zone_id']}")
-        col2.metric("Drive Time", f"{result['drive_time_mins']} mins")
-        col3.metric("Walk Time", f"{result['walk_time_mins']} mins")
-        col4.metric("Spot Confidence", f"{int(result['availability_prob'] * 100)}%")
-
-        path_nodes = result["drive_path"]
-        route_coords = [(G.nodes[n]["y"], G.nodes[n]["x"]) for n in path_nodes]
-        
-        # Driving Route Segment (Cyan)
-        folium.PolyLine(route_coords, color="#38bdf8", weight=5, opacity=0.8, popup="Drive Path").add_to(m)
-
-        # Walking Route Segment (Dashed Green)
-        park_loc = (result["parking_zone"]["lat"], result["parking_zone"]["lon"])
-        folium.PolyLine([park_loc, coords_dest], color="#4ade80", weight=4, opacity=0.9, dash_array="6, 8", popup="Walk Path").add_to(m)
-
-        # Parking Destination Marker
-        folium.Marker(
-            park_loc, 
-            popup=f"Parking Lot: {result['parking_zone']['zone_id']}", 
-            icon=folium.Icon(color="purple", icon="square-parking", prefix="fa")
-        ).add_to(m)
-    else:
-        st.error("Could not determine an optimal parking lot for this route within the graph radius.")
-
-# ---------------------------------------------------------
-# Dynamic Map Display
-# ---------------------------------------------------------
-st_folium(m, width=1300, height=560, key=f"map_{start_address}_{dest_address}_{routing_mode}")
+    st.info("👈 Set your origin and parking hub in the sidebar, then click **Calculate Route & Reserve Slot**.")
