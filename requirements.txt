@@ -2,5 +2,6 @@ streamlit
 networkx
 folium
 streamlit-folium
+osmnx
 qrcode
 pillow
