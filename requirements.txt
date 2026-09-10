@@ -3,5 +3,6 @@ networkx
 folium
 streamlit-folium
 osmnx
+geopy
 qrcode
 pillow
