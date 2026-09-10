@@ -13,7 +13,7 @@ import networkx as nx
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 
-from router.graph_loader import load_street_graph
+from graph_loader import load_street_graph
 from router.parking_sim import generate_parking_zones
 from custom_astar import find_smart_parking_route
 
