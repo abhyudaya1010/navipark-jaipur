@@ -21,8 +21,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# PWA Manifest Injection
-pwa_manifest = {
+# Build JSON string safely outside string interpolation
+pwa_manifest_json = json.dumps({
     "name": "NaviPark 3D Jaipur",
     "short_name": "NaviPark",
     "description": "Smart Mobility & Traffic Network for Jaipur",
@@ -42,11 +42,12 @@ pwa_manifest = {
             "type": "image/png"
         }
     ]
-}
+})
 
+# Pure JavaScript injection without unescaped f-string hazards
 js_code = f"""
 <script>
-    const manifest = {json.dumps(pwa_manifest)};
+    const manifest = {pwa_manifest_json};
     const blob = new Blob([JSON.stringify(manifest)], {{type: 'application/json'}});
     const manifestURL = URL.createObjectURL(blob);
     const parentDocument = window.parent.document;
@@ -98,6 +99,27 @@ st.markdown("""
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
     }
     section[data-testid="stSidebar"] {
+        background-color: rgba(15, 23, 42, 0.9) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: rgba(30, 41, 59, 0.5);
+        padding: 8px;
+        border-radius: 14px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 10px;
+        color: #94A3B8;
+        font-weight: 600;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #2563EB !important;
+        color: #FFFFFF !important;
+        box-shadow: 0 0 15px rgba(37, 99, 235, 0.5);
+    }
+    </style>
+""", unsafe_allow_html=True)
         background-color: rgba(15, 23, 42, 0.9) !important;
         border-right: 1px solid rgba(255, 255, 255, 0.1);
     }
