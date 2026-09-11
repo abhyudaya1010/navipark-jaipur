@@ -4,7 +4,6 @@ import pydeck as pdk
 import qrcode
 import io
 import datetime
-import math
 import random
 import requests
 import pandas as pd
@@ -21,7 +20,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Build JSON string safely outside string interpolation
+# Build JSON string safely
 pwa_manifest_json = json.dumps({
     "name": "NaviPark 3D Jaipur",
     "short_name": "NaviPark",
@@ -124,22 +123,22 @@ st.markdown("""
 # Expanded Seed Dataset: Jaipur Hubs & Major Historic/Commercial Landmarks
 DEFAULT_HUBS_DATA = [
     # Commercial & Transportation Hubs
-    {"name": "Gaurav Tower (GT) Hub", "category": "Commercial", "lat": 26.8528, "lon": 75.8052, "height": 80, "total_slots": 150, "occupied": 130, "road_quality": 8, "ev_slots": 12},
-    {"name": "World Trade Park (WTP) Hub", "category": "Commercial", "lat": 26.8538, "lon": 75.8058, "height": 110, "total_slots": 300, "occupied": 240, "road_quality": 9, "ev_slots": 25},
-    {"name": "Raja Park Commercial Hub", "category": "Commercial", "lat": 26.8917, "lon": 75.8239, "height": 60, "total_slots": 100, "occupied": 85, "road_quality": 6, "ev_slots": 8},
-    {"name": "Jaipur Junction Station Hub", "category": "Transit", "lat": 26.9196, "lon": 75.7878, "height": 95, "total_slots": 250, "occupied": 210, "road_quality": 7, "ev_slots": 15},
-    {"name": "MI Road Shopping District", "category": "Commercial", "lat": 26.9154, "lon": 75.8118, "height": 70, "total_slots": 120, "occupied": 105, "road_quality": 8, "ev_slots": 10},
-    {"name": "MNIT Campus Smart Hub", "category": "Education", "lat": 26.8627, "lon": 75.8122, "height": 55, "total_slots": 80, "occupied": 42, "road_quality": 9, "ev_slots": 20},
+    {"name": "Gaurav Tower (GT) Hub", "category": "Commercial", "lat": 26.8528, "lon": 75.8052, "height": 250, "total_slots": 150, "occupied": 130, "road_quality": 8, "ev_slots": 12},
+    {"name": "World Trade Park (WTP) Hub", "category": "Commercial", "lat": 26.8538, "lon": 75.8058, "height": 300, "total_slots": 300, "occupied": 240, "road_quality": 9, "ev_slots": 25},
+    {"name": "Raja Park Commercial Hub", "category": "Commercial", "lat": 26.8917, "lon": 75.8239, "height": 200, "total_slots": 100, "occupied": 85, "road_quality": 6, "ev_slots": 8},
+    {"name": "Jaipur Junction Station Hub", "category": "Transit", "lat": 26.9196, "lon": 75.7878, "height": 280, "total_slots": 250, "occupied": 210, "road_quality": 7, "ev_slots": 15},
+    {"name": "MI Road Shopping District", "category": "Commercial", "lat": 26.9154, "lon": 75.8118, "height": 220, "total_slots": 120, "occupied": 105, "road_quality": 8, "ev_slots": 10},
+    {"name": "MNIT Campus Smart Hub", "category": "Education", "lat": 26.8627, "lon": 75.8122, "height": 180, "total_slots": 80, "occupied": 42, "road_quality": 9, "ev_slots": 20},
     
     # Famous Jaipur Landmarks & Tourist Heritage Sites
-    {"name": "Hawa Mahal (Palace of Winds)", "category": "Landmark", "lat": 26.9239, "lon": 75.8267, "height": 90, "total_slots": 90, "occupied": 78, "road_quality": 7, "ev_slots": 6},
-    {"name": "City Palace Jaipur", "category": "Landmark", "lat": 26.9258, "lon": 75.8237, "height": 100, "total_slots": 120, "occupied": 95, "road_quality": 8, "ev_slots": 10},
-    {"name": "Amer Fort (Amber)", "category": "Landmark", "lat": 26.9855, "lon": 75.8513, "height": 130, "total_slots": 200, "occupied": 160, "road_quality": 8, "ev_slots": 12},
-    {"name": "Jal Mahal (Water Palace)", "category": "Landmark", "lat": 26.9534, "lon": 75.8462, "height": 75, "total_slots": 110, "occupied": 70, "road_quality": 8, "ev_slots": 8},
-    {"name": "Albert Hall Museum", "category": "Landmark", "lat": 26.9116, "lon": 75.8195, "height": 85, "total_slots": 140, "occupied": 90, "road_quality": 9, "ev_slots": 14},
-    {"name": "Nahargarh Fort", "category": "Landmark", "lat": 26.9372, "lon": 75.8155, "height": 120, "total_slots": 150, "occupied": 115, "road_quality": 6, "ev_slots": 5},
-    {"name": "Jantar Mantar Observatory", "category": "Landmark", "lat": 26.9248, "lon": 75.8246, "height": 65, "total_slots": 85, "occupied": 60, "road_quality": 8, "ev_slots": 6},
-    {"name": "Birla Mandir (Laxmi Narayan)", "category": "Landmark", "lat": 26.8924, "lon": 75.8156, "height": 70, "total_slots": 130, "occupied": 95, "road_quality": 9, "ev_slots": 10}
+    {"name": "Hawa Mahal (Palace of Winds)", "category": "Landmark", "lat": 26.9239, "lon": 75.8267, "height": 260, "total_slots": 90, "occupied": 78, "road_quality": 7, "ev_slots": 6},
+    {"name": "City Palace Jaipur", "category": "Landmark", "lat": 26.9258, "lon": 75.8237, "height": 290, "total_slots": 120, "occupied": 95, "road_quality": 8, "ev_slots": 10},
+    {"name": "Amer Fort (Amber)", "category": "Landmark", "lat": 26.9855, "lon": 75.8513, "height": 350, "total_slots": 200, "occupied": 160, "road_quality": 8, "ev_slots": 12},
+    {"name": "Jal Mahal (Water Palace)", "category": "Landmark", "lat": 26.9534, "lon": 75.8462, "height": 240, "total_slots": 110, "occupied": 70, "road_quality": 8, "ev_slots": 8},
+    {"name": "Albert Hall Museum", "category": "Landmark", "lat": 26.9116, "lon": 75.8195, "height": 270, "total_slots": 140, "occupied": 90, "road_quality": 9, "ev_slots": 14},
+    {"name": "Nahargarh Fort", "category": "Landmark", "lat": 26.9372, "lon": 75.8155, "height": 320, "total_slots": 150, "occupied": 115, "road_quality": 6, "ev_slots": 5},
+    {"name": "Jantar Mantar Observatory", "category": "Landmark", "lat": 26.9248, "lon": 75.8246, "height": 210, "total_slots": 85, "occupied": 60, "road_quality": 8, "ev_slots": 6},
+    {"name": "Birla Mandir (Laxmi Narayan)", "category": "Landmark", "lat": 26.8924, "lon": 75.8156, "height": 230, "total_slots": 130, "occupied": 95, "road_quality": 9, "ev_slots": 10}
 ]
 
 # ==========================================
@@ -174,10 +173,10 @@ def fetch_real_hubs():
                         "id": row.get("id", f"hub_{i}"),
                         "name": row["name"],
                         "category": row.get("category", "General"),
-                        "lat": row["lat"], "lon": row["lon"],
-                        "height": row.get("height", 50),
-                        "total_slots": row["total_slots"], 
-                        "occupied": row["occupied"],
+                        "lat": float(row["lat"]), "lon": float(row["lon"]),
+                        "height": row.get("height", 250),
+                        "total_slots": int(row["total_slots"]), 
+                        "occupied": int(row["occupied"]),
                         "road_quality": row.get("road_quality", 7),
                         "ev_slots": row.get("ev_slots", 5)
                     } for i, row in enumerate(res.data)
@@ -220,7 +219,10 @@ def create_pay_at_venue_reservation(hub_name, fee):
 # 4. ROUTE CALCULATION (OSRM SHORTEST PATH ENGINE)
 # ==========================================
 def get_osrm_route(start_lat, start_lon, end_lat, end_lon):
-    """Fetches real driving geometry, distance, and time using open OSRM routing."""
+    """
+    Fetches real driving geometry using OSRM.
+    IMPORTANT: Returns coordinates formatted as [longitude, latitude] for PyDeck PathLayer.
+    """
     url = f"http://router.project-osrm.org/route/v1/driving/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson"
     try:
         r = requests.get(url, timeout=4)
@@ -228,16 +230,14 @@ def get_osrm_route(start_lat, start_lon, end_lat, end_lon):
             data = r.json()
             if data.get("routes"):
                 route = data["routes"][0]
-                coords = route["geometry"]["coordinates"]
-                # Convert [lon, lat] to [lat, lon]
-                path = [[c[1], c[0]] for c in coords]
+                coords = route["geometry"]["coordinates"] # Already in [lon, lat] format
                 dist_km = route["distance"] / 1000.0
                 duration_min = route["duration"] / 60.0
-                return path, round(dist_km, 2), round(duration_min, 1)
+                return coords, round(dist_km, 2), round(duration_min, 1)
     except Exception:
         pass
-    # Fallback straight line calculation
-    return [[start_lat, start_lon], [end_lat, end_lon]], 5.0, 12.0
+    # Fallback straight line formatted in [lon, lat]
+    return [[start_lon, start_lat], [end_lon, end_lat]], 5.0, 12.0
 
 # ==========================================
 # 5. HEADER & AUTOMATED TELEMETRY FRAGMENT
@@ -282,20 +282,20 @@ with tab1:
         available = h["total_slots"] - h["occupied"]
         occupancy_rate = h["occupied"] / h["total_slots"]
         
-        # Color coding: Red = High Occupancy, Green = Low Occupancy
+        # Color coding: Red = High Occupancy, Yellow = Moderate, Green = Low
         if occupancy_rate > 0.85:
-            color = [239, 68, 68, 200]
+            color = [239, 68, 68, 220]
         elif occupancy_rate > 0.60:
-            color = [245, 158, 11, 200]
+            color = [245, 158, 11, 220]
         else:
-            color = [16, 185, 129, 200]
+            color = [16, 185, 129, 220]
             
         map_data.append({
             "name": h["name"],
             "category": h.get("category", "General"),
-            "lat": h["lat"],
-            "lon": h["lon"],
-            "height": h["height"] * 3,
+            "lat": float(h["lat"]),
+            "lon": float(h["lon"]),
+            "height": float(h.get("height", 250)),
             "occupied": h["occupied"],
             "total_slots": h["total_slots"],
             "available": available,
@@ -318,51 +318,58 @@ with tab1:
         }
         
         user_origin = st.selectbox("Starting Location", list(origin_coords.keys()))
-        
         dest_hub_name = st.selectbox("Select Destination / Landmark", list(current_hubs.keys()))
         target_hub = current_hubs[dest_hub_name]
         
         orig_lat, orig_lon = origin_coords[user_origin]
+        
+        # Get path array formatted as [[lon, lat], ...]
         route_path, dist_km, duration_min = get_osrm_route(orig_lat, orig_lon, target_hub["lat"], target_hub["lon"])
         
         st.metric("Shortest Distance", f"{dist_km} km")
         st.metric("Est. Driving Time", f"{duration_min} mins")
         
-        st.markdown(f"**Selected Hub Type:** `{target_hub.get('category', 'General')}`")
+        st.markdown(f"**Selected Category:** `{target_hub.get('category', 'General')}`")
         st.markdown(f"**Live Parking Status:** `{target_hub['total_slots'] - target_hub['occupied']} slots free`")
         
         st.write("---")
         st.caption("🟢 Green: Low Occupancy | 🟠 Yellow: Moderate | 🔴 Red: High Traffic")
 
     with col_map:
-        # PyDeck 3D Layer Construction
+        # 1. 3D Columns for Landmarks & Parking Hubs
         column_layer = pdk.Layer(
             "ColumnLayer",
             data=df_map,
             get_position=["lon", "lat"],
             get_elevation="height",
-            radius=90,
+            radius=110,
             get_fill_color="color",
             pickable=True,
             auto_highlight=True,
             elevation_scale=1,
         )
         
+        # 2. Cyan Route Line connecting Origin to Destination
         route_df = pd.DataFrame([{"path": route_path}])
         path_layer = pdk.Layer(
             "PathLayer",
             data=route_df,
             get_path="path",
-            get_color=[56, 189, 248, 255],
-            width_min_pixels=5,
+            get_color=[56, 189, 248, 255], # Cyan route color
+            width_min_pixels=6,
+            width_max_pixels=10
         )
         
+        # Calculate midpoint to center map smoothly between origin & destination
+        mid_lat = (orig_lat + target_hub["lat"]) / 2
+        mid_lon = (orig_lon + target_hub["lon"]) / 2
+        
         view_state = pdk.ViewState(
-            latitude=target_hub["lat"],
-            longitude=target_hub["lon"],
-            zoom=12,
-            pitch=45,
-            bearing=15
+            latitude=mid_lat,
+            longitude=mid_lon,
+            zoom=11,
+            pitch=50,
+            bearing=10
         )
         
         st.pydeck_chart(pdk.Deck(
@@ -496,4 +503,3 @@ with tab4:
     ])
     
     st.dataframe(analytics_df, use_container_width=True)
-            
