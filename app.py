@@ -15,6 +15,53 @@ from supabase import create_client, Client
 # 1. STREAMLIT CONFIG & HIGH-CONTRAST GLASS UI
 # ==========================================
 st.set_page_config(
+    # ==========================================
+# PWA (PROGRESSIVE WEB APP) MANIFEST INJECTION
+# ==========================================
+pwa_manifest = {
+    "name": "NaviPark 3D Jaipur",
+    "short_name": "NaviPark",
+    "description": "Smart Mobility & Traffic Network for Jaipur",
+    "start_url": "./",
+    "display": "standalone",
+    "background_color": "#070A12",
+    "theme_color": "#38BDF8",
+    "icons": [
+        {
+            "src": "https://cdn-icons-png.flaticon.com/512/1048/1048314.png", 
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "https://cdn-icons-png.flaticon.com/512/1048/1048314.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
+
+# JavaScript to inject the manifest into the Streamlit parent iframe
+js_code = f"""
+<script>
+    const manifest = {json.dumps(pwa_manifest)};
+    const blob = new Blob([JSON.stringify(manifest)], {{type: 'application/json'}});
+    const manifestURL = URL.createObjectURL(blob);
+    
+    // Target the parent window (since Streamlit runs in an iframe)
+    const parentDocument = window.parent.document;
+    
+    // Remove existing manifest if present during hot-reloads
+    const existing = parentDocument.querySelector('link[rel="manifest"]');
+    if (existing) {{ existing.remove(); }}
+    
+    const link = parentDocument.createElement('link');
+    link.rel = 'manifest';
+    link.href = manifestURL;
+    parentDocument.head.appendChild(link);
+</script>
+"""
+
+components.html(js_code, height=0)
     page_title="NaviPark 3D - Smart Mobility & Traffic Network",
     page_icon="🚘",
     layout="wide",
