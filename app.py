@@ -102,6 +102,8 @@ DEFAULT_HUBS_DATA = [
 # ==========================================
 # 3. DATABASE & REAL-TIME TELEMETRY
 # ==========================================
+import random
+
 @st.cache_resource
 def init_supabase() -> Client:
     url = st.secrets.get("SUPABASE_URL", "")
@@ -116,12 +118,12 @@ try:
 except Exception:
     pass
 
-# Persistent local state for active hub tracking
+# Initialize session state ONCE on app boot
 if "hubs_data" not in st.session_state:
     st.session_state["hubs_data"] = {item["name"]: item.copy() for item in DEFAULT_HUBS_DATA}
 
 def fetch_real_hubs():
-    """Fetch live slot telemetry from Supabase or fallback to active Session State."""
+    """Returns active state from Supabase or live session memory."""
     if supabase:
         try:
             res = supabase.table("hubs").select("*").execute()
@@ -143,7 +145,7 @@ def fetch_real_hubs():
     return st.session_state["hubs_data"]
 
 def create_pay_at_venue_reservation(hub_name, fee):
-    """Inserts reservation record and updates occupancy count instantly."""
+    """Inserts reservation and increments occupied count instantly."""
     pass_id = f"NPJ-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
     clean_target = hub_name.strip()
     
@@ -223,14 +225,13 @@ st.markdown('<div class="sub-title">Live 3D Map Engine, OSRM Route Optimization 
 
 @st.fragment(run_every=10)
 def auto_sync_banner():
-    """Simulates real-time sensor updates for parking occupancy across Jaipur hubs."""
-    for hub_key, hub in st.session_state["hubs_data"].items():
-        change = random.choice([-2, -1, 0, 1, 2])
-        new_occ = max(0, min(hub["total_slots"], hub["occupied"] + change))
-        hub["occupied"] = new_occ
+    """Simulates active parking occupancy changes by mutating session state directly."""
+    for name, hub in st.session_state["hubs_data"].items():
+        delta = random.randint(-3, 3)
+        hub["occupied"] = max(10, min(hub["total_slots"], hub["occupied"] + delta))
 
     st.caption(
-        f"⚡ **Live Sensor Telemetry Active:** Auto-syncing parking occupancy & traffic flow | "
+        f"⚡ **Live Sensor Telemetry Active:** Auto-syncing parking occupancy | "
         f"Last Telemetry Pulse: {datetime.datetime.now().strftime('%H:%M:%S IST')}"
     )
 
