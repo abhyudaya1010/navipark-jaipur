@@ -127,7 +127,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Expanded Dataset with Hub Metadata & Hourly Pricing
+# Default dataset with full metadata fallback
 DEFAULT_HUBS_DATA = [
     {"name": "Gaurav Tower (GT) Hub", "category": "Commercial", "lat": 26.8528, "lon": 75.8052, "height": 250, "total_slots": 150, "occupied": 130, "road_quality": 8, "ev_slots": 12, "hourly_rate": 30},
     {"name": "World Trade Park (WTP) Hub", "category": "Commercial", "lat": 26.8538, "lon": 75.8058, "height": 300, "total_slots": 300, "occupied": 240, "road_quality": 9, "ev_slots": 25, "hourly_rate": 40},
@@ -176,14 +176,15 @@ def fetch_real_hubs():
                 return {
                     row["name"].strip(): {
                         "id": row.get("id", f"hub_{i}"),
-                        "name": row["name"],
+                        "name": row.get("name", "Unknown Hub"),
                         "category": row.get("category", "General"),
-                        "lat": float(row["lat"]), "lon": float(row["lon"]),
+                        "lat": float(row.get("lat", 26.9124)),
+                        "lon": float(row.get("lon", 75.7873)),
                         "height": row.get("height", 250),
-                        "total_slots": int(row["total_slots"]), 
-                        "occupied": int(row["occupied"]),
+                        "total_slots": int(row.get("total_slots", 100)), 
+                        "occupied": int(row.get("occupied", 50)),
                         "road_quality": row.get("road_quality", 7),
-                        "ev_slots": row.get("ev_slots", 5),
+                        "ev_slots": row.get("ev_slots", 0),
                         "hourly_rate": row.get("hourly_rate", 30)
                     } for i, row in enumerate(res.data)
                 }
@@ -197,8 +198,10 @@ def create_pay_at_venue_reservation(hub_name, fee):
     
     if clean_target in st.session_state["hubs_data"]:
         hub = st.session_state["hubs_data"][clean_target]
-        if hub["occupied"] < hub["total_slots"]:
-            hub["occupied"] += 1
+        tot = hub.get("total_slots", 100)
+        occ = hub.get("occupied", 0)
+        if occ < tot:
+            hub["occupied"] = occ + 1
 
     pass_record = {
         "pass_id": pass_id,
@@ -242,6 +245,8 @@ def calculate_trip_impact(dist_km, vehicle_type="Petrol Car"):
         co2_kg = dist_km * 0.12
     return round(cost, 1), round(co2_kg, 2)
 
+current_hubs = fetch_real_hubs()
+
 # ==========================================
 # 5. SIDEBAR FILTERS & SETTINGS
 # ==========================================
@@ -249,7 +254,9 @@ with st.sidebar:
     st.title("⚙️ Map & Network Controls")
     
     st.subheader("🔍 Live Map Filters")
-    categories = list(set(h["category"] for h in DEFAULT_HUBS_DATA))
+    
+    # Safely build category list using fallback `.get()`
+    categories = sorted(list(set(h.get("category", "General") for h in current_hubs.values())))
     selected_cats = st.multiselect("Filter by Category", categories, default=categories)
     
     min_free_slots = st.slider("Min. Free Slots Required", 0, 50, 0)
@@ -272,7 +279,9 @@ st.markdown('<div class="sub-title">Smart Mobility, 3D Route Engine & Real-Time 
 def auto_sync_banner():
     for name, hub in st.session_state["hubs_data"].items():
         delta = random.randint(-2, 2)
-        hub["occupied"] = max(10, min(hub["total_slots"], hub["occupied"] + delta))
+        tot = hub.get("total_slots", 100)
+        occ = hub.get("occupied", 50)
+        hub["occupied"] = max(10, min(tot, occ + delta))
 
     st.caption(
         f"⚡ **Live Network Telemetry:** Monitoring {len(st.session_state['hubs_data'])} Jaipur landmarks & hubs | "
@@ -292,26 +301,29 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 City Network Analytics"
 ])
 
-current_hubs = fetch_real_hubs()
-
 # ------------------------------------------
 # TAB 1: INTERACTIVE 3D ROUTE MAP
 # ------------------------------------------
 with tab1:
     col_map, col_control = st.columns([3, 1])
     
-    # Filter hubs based on sidebar controls
+    # Filter hubs based on sidebar controls safely
     map_data = []
     for h in current_hubs.values():
-        available = h["total_slots"] - h["occupied"]
-        occupancy_rate = h["occupied"] / h["total_slots"]
+        tot = h.get("total_slots", 100)
+        occ = h.get("occupied", 0)
+        available = tot - occ
+        occupancy_rate = occ / tot if tot > 0 else 0
         
-        # Apply Sidebar Filters
-        if h.get("category", "General") not in selected_cats:
+        category = h.get("category", "General")
+        ev_slots = h.get("ev_slots", 0)
+        
+        # Apply Sidebar Filters with safe key retrieval
+        if category not in selected_cats:
             continue
         if available < min_free_slots:
             continue
-        if ev_only and h.get("ev_slots", 0) == 0:
+        if ev_only and ev_slots == 0:
             continue
 
         if occupancy_rate > 0.85:
@@ -322,15 +334,15 @@ with tab1:
             color = [16, 185, 129, 220]
             
         map_data.append({
-            "name": h["name"],
-            "category": h.get("category", "General"),
-            "lat": float(h["lat"]),
-            "lon": float(h["lon"]),
+            "name": h.get("name", "Hub"),
+            "category": category,
+            "lat": float(h.get("lat", 26.9124)),
+            "lon": float(h.get("lon", 75.7873)),
             "height": float(h.get("height", 250)),
-            "occupied": h["occupied"],
-            "total_slots": h["total_slots"],
+            "occupied": occ,
+            "total_slots": tot,
             "available": available,
-            "ev_slots": h.get("ev_slots", 0),
+            "ev_slots": ev_slots,
             "color": color
         })
     
@@ -355,18 +367,22 @@ with tab1:
         
         orig_lat, orig_lon = origin_coords[user_origin]
         
-        # Get OSRM Driving Route
-        route_path, dist_km, duration_min = get_osrm_route(orig_lat, orig_lon, target_hub["lat"], target_hub["lon"])
+        # Get OSRM Driving Route safely
+        dest_lat = float(target_hub.get("lat", 26.9124))
+        dest_lon = float(target_hub.get("lon", 75.7873))
+        route_path, dist_km, duration_min = get_osrm_route(orig_lat, orig_lon, dest_lat, dest_lon)
         
         st.metric("Shortest Driving Distance", f"{dist_km} km")
         st.metric("Est. Travel Time", f"{duration_min} mins")
         
         # Quick Route Simulation Drawer
         with st.expander("🚘 Turn-by-Turn Route Steps"):
+            dest_cat = target_hub.get("category", "Landmark")
+            avail_slots = target_hub.get("total_slots", 100) - target_hub.get("occupied", 0)
             st.write(f"1. **Start:** Depart from `{user_origin}`")
-            st.write(f"2. **Merge:** Join main arterial road towards `{target_hub['category']}` corridor")
-            st.write(f"3. **Arrive:** Destination `{target_hub['name']}` on right")
-            st.write(f"4. **Parking:** `{target_hub['total_slots'] - target_hub['occupied']}` slots available")
+            st.write(f"2. **Merge:** Join main arterial road towards `{dest_cat}` corridor")
+            st.write(f"3. **Arrive:** Destination `{target_hub.get('name', dest_hub_name)}` on right")
+            st.write(f"4. **Parking:** `{avail_slots}` slots available")
 
         st.write("---")
         st.caption("🟢 Green: High Availability | 🟠 Yellow: Moderate | 🔴 Red: Near Capacity")
@@ -395,8 +411,8 @@ with tab1:
                 width_max_pixels=10
             )
             
-            mid_lat = (orig_lat + target_hub["lat"]) / 2
-            mid_lon = (orig_lon + target_hub["lon"]) / 2
+            mid_lat = (orig_lat + dest_lat) / 2
+            mid_lon = (orig_lon + dest_lon) / 2
             
             view_state = pdk.ViewState(
                 latitude=mid_lat,
@@ -426,13 +442,17 @@ with tab2:
         st.markdown("### Generate Gate Pass")
         res_hub = st.selectbox("Target Landmark / Parking Hub", list(current_hubs.keys()), key="res_hub_select")
         selected_data = current_hubs[res_hub]
-        avail_count = selected_data["total_slots"] - selected_data["occupied"]
         
-        st.info(f"📍 **{res_hub}**\n\nSlots Free: **{avail_count} / {selected_data['total_slots']}** | Rate: **₹{selected_data.get('hourly_rate', 30)}/hr**")
+        tot = selected_data.get("total_slots", 100)
+        occ = selected_data.get("occupied", 0)
+        avail_count = tot - occ
+        rate = selected_data.get("hourly_rate", 30)
+        
+        st.info(f"📍 **{res_hub}**\n\nSlots Free: **{avail_count} / {tot}** | Rate: **₹{rate}/hr**")
         
         vehicle_no = st.text_input("Vehicle License Plate", value="RJ-14-CC-2026")
         duration = st.slider("Parking Duration (Hours)", 1, 8, 2)
-        base_fee = duration * selected_data.get('hourly_rate', 30)
+        base_fee = duration * rate
         
         st.markdown(f"#### Calculated Fee: **₹{base_fee}** *(Pay at Gate)*")
         
@@ -471,7 +491,6 @@ with tab2:
         else:
             st.info("No active pass generated yet. Use the form on the left to issue a gate pass.")
 
-        # Digital Wallet History Component
         if st.session_state["user_passes"]:
             st.write("---")
             st.markdown("#### 📜 Session Pass History")
@@ -527,7 +546,10 @@ with tab4:
         c_orig_lat, c_orig_lon = origin_coords[calc_origin]
         c_target = current_hubs[calc_dest]
         
-        _, trip_dist, trip_time = get_osrm_route(c_orig_lat, c_orig_lon, c_target["lat"], c_target["lon"])
+        c_dest_lat = float(c_target.get("lat", 26.9124))
+        c_dest_lon = float(c_target.get("lon", 75.7873))
+        
+        _, trip_dist, trip_time = get_osrm_route(c_orig_lat, c_orig_lon, c_dest_lat, c_dest_lon)
         
         est_cost, est_co2 = calculate_trip_impact(trip_dist, vehicle_mode)
         
@@ -554,10 +576,10 @@ with tab4:
 with tab5:
     st.subheader("📊 City Network Health & Analytics")
     
-    total_capacity = sum(h["total_slots"] for h in current_hubs.values())
-    total_occupied = sum(h["occupied"] for h in current_hubs.values())
+    total_capacity = sum(h.get("total_slots", 100) for h in current_hubs.values())
+    total_occupied = sum(h.get("occupied", 0) for h in current_hubs.values())
     total_ev = sum(h.get("ev_slots", 0) for h in current_hubs.values())
-    net_utilization = (total_occupied / total_capacity) * 100
+    net_utilization = (total_occupied / total_capacity * 100) if total_capacity > 0 else 0
     
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     col_m1.metric("Landmarks & Hubs Online", len(current_hubs))
@@ -568,19 +590,25 @@ with tab5:
     st.write("---")
     st.subheader("Live Hub & Landmark Breakdown")
     
-    analytics_df = pd.DataFrame([
-        {
-            "Landmark / Hub Name": h["name"],
+    analytics_data = []
+    for h in current_hubs.values():
+        tot = h.get("total_slots", 100)
+        occ = h.get("occupied", 0)
+        util = (occ / tot * 100) if tot > 0 else 0
+        rate = h.get("hourly_rate", 30)
+        quality = h.get("road_quality", 7)
+        
+        analytics_data.append({
+            "Landmark / Hub Name": h.get("name", "Hub"),
             "Category": h.get("category", "General"),
-            "Occupied": h["occupied"],
-            "Capacity": h["total_slots"],
-            "Free Slots": h["total_slots"] - h["occupied"],
-            "Hourly Rate": f"₹{h.get('hourly_rate', 30)}/hr",
-            "Utilization": f"{(h['occupied']/h['total_slots'])*100:.1f}%",
-            "Road Index": f"{h['road_quality']}/10",
+            "Occupied": occ,
+            "Capacity": tot,
+            "Free Slots": tot - occ,
+            "Hourly Rate": f"₹{rate}/hr",
+            "Utilization": f"{util:.1f}%",
+            "Road Index": f"{quality}/10",
             "EV Ports": h.get("ev_slots", 0)
-        }
-        for h in current_hubs.values()
-    ])
+        })
     
+    analytics_df = pd.DataFrame(analytics_data)
     st.dataframe(analytics_df, use_container_width=True)
