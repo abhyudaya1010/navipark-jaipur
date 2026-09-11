@@ -161,48 +161,79 @@ def create_pay_at_venue_reservation(hub_name, fee):
     return pass_id, "Generated"
 
 # ==========================================
-# 4. REAL-TIME ROUTING & TOMTOM TRAFFIC ENGINE
+# 3. DATABASE & REAL-TIME TELEMETRY
 # ==========================================
-def get_osrm_route(start_coords, end_coords, strategy):
-    """Queries OpenStreetMap OSRM Routing Engine for accurate turn-by-turn geometry."""
-    url = f"http://router.project-osrm.org/route/v1/driving/{start_coords[1]},{start_coords[0]};{end_coords[1]},{end_coords[0]}?overview=full&geometries=geojson"
-    try:
-        r = requests.get(url, timeout=4).json()
-        route = r['routes'][0]
-        geometry = route['geometry']['coordinates']
-        dist_km = route['distance'] / 1000.0
-        dur_min = route['duration'] / 60.0
-        
-        if strategy == "Fuel Efficient":
-            dur_min *= 1.05
-            fuel = round(dist_km * 0.062, 2)
-        elif strategy == "Best Road Quality":
-            dist_km *= 1.08
-            dur_min *= 0.96
-            fuel = round(dist_km * 0.068, 2)
-        else: # Traffic Avoidance
-            fuel = round(dist_km * 0.075, 2)
-            
-        path = [[lon, lat] for lon, lat in geometry]
-        return path, round(dist_km, 2), round(dur_min, 1), fuel
-    except Exception:
-        # Mathematical fallback path
-        dist_km = 8.5
-        dur_min = 18.0
-        return [[start_coords[1], start_coords[0]], [end_coords[1], end_coords[0]]], dist_km, dur_min, 0.6
+import random
 
-def fetch_live_corridor_speed(corridor_name, fallback_speed):
-    """Optional TomTom Traffic API Integration."""
-    tomtom_key = st.secrets.get("TOMTOM_API_KEY", None)
-    if not tomtom_key:
-        return fallback_speed, "Real Time (Corridor Matrix)"
-    try:
-        url = f"https://api.tomtom.com/traffic/services/4/flowSegmentData/relative0/10/json?key={tomtom_key}&point=26.8530,75.8048"
-        res = requests.get(url, timeout=3).json()
-        speed = res['flowSegmentData']['currentSpeed']
-        return speed, "Live TomTom Feed"
-    except Exception:
-        return fallback_speed, "Corridor Matrix"
+@st.cache_resource
+def init_supabase() -> Client:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+supabase = None
+try:
+    supabase = init_supabase()
+except Exception:
+    pass
+
+# Store hubs in Streamlit session state for persistent live updates
+if "hubs_data" not in st.session_state:
+    st.session_state["hubs_data"] = {item["name"]: item.copy() for item in DEFAULT_HUBS_DATA}
+
+def fetch_real_hubs():
+    """Fetch live slot telemetry from Supabase or fallback to active Session State."""
+    if supabase:
+        try:
+            res = supabase.table("hubs").select("*").execute()
+            if res.data:
+                return {
+                    row["name"].strip(): {
+                        "id": row.get("id", f"hub_{i}"),
+                        "name": row["name"],
+                        "lat": row["lat"], "lon": row["lon"],
+                        "height": row.get("height", 50),
+                        "total_slots": row["total_slots"], 
+                        "occupied": row["occupied"],
+                        "road_quality": row.get("road_quality", 7),
+                        "ev_slots": row.get("ev_slots", 5)
+                    } for i, row in enumerate(res.data)
+                }
+        except Exception:
+            pass
+    return st.session_state["hubs_data"]
+
+def create_pay_at_venue_reservation(hub_name, fee):
+    """Inserts reservation record and increments occupied count instantly."""
+    pass_id = f"NPJ-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+    clean_target = hub_name.strip()
+    
+    # 1. Update local session state immediately so UI/map changes instantly
+    if clean_target in st.session_state["hubs_data"]:
+        hub = st.session_state["hubs_data"][clean_target]
+        if hub["occupied"] < hub["total_slots"]:
+            hub["occupied"] += 1
+
+    # 2. Sync to Supabase DB if available
+    if supabase:
+        try:
+            response = supabase.table("hubs").select("*").ilike("name", clean_target).execute()
+            if response.data:
+                db_hub = response.data[0]
+                if db_hub["occupied"] < db_hub["total_slots"]:
+                    supabase.table("hubs").update({"occupied": db_hub["occupied"] + 1}).eq("name", db_hub["name"]).execute()
+                    now = datetime.datetime.now(datetime.timezone.utc)
+                    supabase.table("reservations").insert({
+                        "pass_id": pass_id,
+                        "hub_name": db_hub["name"],
+                        "created_at": now.isoformat(),
+                        "payment_status": "PAY_AT_VENUE",
+                        "amount": fee
+                    }).execute()
+        except Exception:
+            pass
+
+    return pass_id, "Success"
 
 # ==========================================
 # 5. HEADER & AUTOMATED TELEMETRY FRAGMENT
