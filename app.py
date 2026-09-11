@@ -408,5 +408,16 @@ with tab4:
     o1.metric("Total Infrastructure", f"{tot_cap} Slots")
     o2.metric("Occupied Infrastructure", f"{tot_occ} Vehicles")
     o3.metric("Network Utilization", f"{util_rate}%")
-    o4.metric("Est. Hourly Venue Revenue", f"Which line are you looking for? If it's from a specific problem, code block, or text you were working on, share the context or prompt you're referring to and I'll help you locate or fix it right away!
+    o4.metric("Est. Hourly Venue Revenue", f"₹{tot_occ * 50}")
     
+    st.markdown("---")
+    st.write("### 🏢 Facility Capacity Breakdowns")
+    for hname, hdata in all_hubs.items():
+        occ, tot = hdata["occupied"], hdata["total_slots"]
+        pct = min(1.0, max(0.0, occ / tot)) if tot > 0 else 0.0
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            st.write(f"**{hname}**")
+            st.caption(f"{occ} / {tot} slots occupied")
+        with c2:
+            st.progress(pct)
