@@ -307,7 +307,7 @@ with tab1:
         occupancy_rate = h["occupied"] / h["total_slots"]
         
         # Apply Sidebar Filters
-        if h["category"] not in selected_cats:
+        if h.get("category", "General") not in selected_cats:
             continue
         if available < min_free_slots:
             continue
