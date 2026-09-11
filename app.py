@@ -56,7 +56,7 @@ JAIPUR_CORRIDORS = {
     "MI Road (Panch Batti - Ajmeri Gate)": {"status": "Heavy Congestion", "delay_min": 14, "speed_kmh": 14, "color": "#EF4444"},
     "Tonk Road (Rambagh Circle)": {"status": "Flowing", "delay_min": 2, "speed_kmh": 38, "color": "#10B981"},
     "B2 Bypass Junction": {"status": "Moderate", "delay_min": 6, "speed_kmh": 25, "color": "#F59E0B"},
-    "Jaipurt-Delhi Highway (Transport Nagar)": {"status": "Heavy Congestion", "delay_min": 12, "speed_kmh": 16, "color": "#EF4444"}
+    "Jaipur-Delhi Highway (Transport Nagar)": {"status": "Heavy Congestion", "delay_min": 12, "speed_kmh": 16, "color": "#EF4444"}
 }
 
 JAIPUR_EVENTS = {
@@ -194,6 +194,41 @@ def optimize_route(orig_lat, orig_lon, dest_lat, dest_lon, traffic_factor=1.2, a
     fuel_saved_l = round(distance_km * 0.08, 2)
     return round(distance_km, 2), math.ceil(base_drive_time_min), walk_time_min, co2_saved, fuel_saved_l
 
+# Helper function to generate Folium maps with Google Traffic Layer
+def create_traffic_map(orig_lat, orig_lon, dest_lat, dest_lon, orig_name, target_hub, line_color):
+    center_lat = (orig_lat + dest_lat) / 2
+    center_lon = (orig_lon + dest_lon) / 2
+    
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles=None)
+
+    # Base Map Layer
+    folium.TileLayer(
+        tiles="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+        attr="CartoDB Voyager",
+        name="Base Map"
+    ).add_to(m)
+
+    # Google Maps Real-Time Traffic Overlay Layer
+    google_traffic = folium.TileLayer(
+        tiles="http://mt0.google.com/vt/lyrs=m,traffic&x={x}&y={y}&z={z}",
+        attr="Google Maps Traffic",
+        name="Google Traffic",
+        overlay=True,
+        control=True
+    )
+    google_traffic.add_to(m)
+
+    # Origin & Destination Markers
+    folium.Marker([orig_lat, orig_lon], popup=f"Start: {orig_name}", icon=folium.Icon(color="green", icon="play")).add_to(m)
+    folium.Marker([dest_lat, dest_lon], popup=target_hub, icon=folium.Icon(color="red", icon="parking")).add_to(m)
+
+    # Route Polyline
+    folium.PolyLine([(orig_lat, orig_lon), (dest_lat, dest_lon)], color=line_color, weight=6, opacity=0.85).add_to(m)
+
+    # Layer Control Toggle
+    folium.LayerControl(position="topright").add_to(m)
+    return m
+
 # ---------------------------------------------------------
 # INTERFACE TABS
 # ---------------------------------------------------------
@@ -326,14 +361,10 @@ with tab1:
             map_col, pass_col = st.columns([2, 1])
 
             with map_col:
-                st.subheader("🗺️ Traffic-Aware Navigation Route")
-                m = folium.Map(location=[(orig_lat + dest_lat)/2, (orig_lon + dest_lon)/2], zoom_start=13, tiles="CartoDB positron")
-                folium.Marker([orig_lat, orig_lon], popup=f"Start: {orig_name}", icon=folium.Icon(color="green", icon="play")).add_to(m)
-                folium.Marker([dest_lat, dest_lon], popup=target_hub, icon=folium.Icon(color="red", icon="parking")).add_to(m)
-                
-                # Route line colored based on traffic intensity
+                st.subheader("🗺️ Traffic Navigation Map (Google Traffic Overlay)")
                 line_color = "#1E3A8A" if traffic_condition == "Light (Off-Peak)" else ("#F59E0B" if traffic_condition == "Moderate (Normal)" else "#EF4444")
-                folium.PolyLine([(orig_lat, orig_lon), (dest_lat, dest_lon)], color=line_color, weight=6, opacity=0.85).add_to(m)
+                
+                m = create_traffic_map(orig_lat, orig_lon, dest_lat, dest_lon, orig_name, target_hub, line_color)
                 st_folium(m, use_container_width=True, height=380, returned_objects=[])
 
             with pass_col:
@@ -518,4 +549,5 @@ with tab5:
                 st.caption(f"{occ} / {tot} slots filled")
             with c_bar:
                 st.progress(pct)
+                
             
