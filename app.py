@@ -197,7 +197,6 @@ def fetch_live_corridor_speed(corridor_name, fallback_speed):
     if not tomtom_key:
         return fallback_speed, "Real Time (Corridor Matrix)"
     try:
-        # Example TomTom Flow Segment query
         url = f"https://api.tomtom.com/traffic/services/4/flowSegmentData/relative0/10/json?key={tomtom_key}&point=26.8530,75.8048"
         res = requests.get(url, timeout=3).json()
         speed = res['flowSegmentData']['currentSpeed']
@@ -209,7 +208,7 @@ def fetch_live_corridor_speed(corridor_name, fallback_speed):
 # 5. HEADER & AUTOMATED TELEMETRY FRAGMENT
 # ==========================================
 st.markdown('<div class="main-title">NaviPark 3D Network 🚘</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Live 3D Satellite Map Engine, OSRM Route Optimization & Pay-at-Venue System</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Live 3D Map Engine, OSRM Route Optimization & Pay-at-Venue System</div>', unsafe_allow_html=True)
 
 @st.fragment(run_every=300)
 def auto_sync_banner():
@@ -230,7 +229,7 @@ routing_strategy = st.sidebar.radio(
     ["Traffic Avoidance", "Fuel Efficient", "Best Road Quality"]
 )
 
-map_style = st.sidebar.selectbox("3D Map Style", ["Dark Cyberpunk 3D", "Satellite Hybrid 3D"])
+map_style = st.sidebar.selectbox("3D Map Style", ["Dark Mode 3D", "Road Mode 3D"])
 emergency_wave = st.sidebar.toggle("🚑 Emergency Green Wave (SMS Hospital)", value=False)
 
 start_coords = LANDMARKS[start_name]
@@ -259,14 +258,14 @@ if st.sidebar.button("🔒 Reserve Spot Now"):
 # 7. MAIN TABS INTERFACE
 # ==========================================
 tab1, tab2, tab3, tab4 = st.tabs([
-    "🗺️ 3D Satellite Map & Navigation", 
+    "🗺️ 3D Map & Navigation", 
     "🚦 Real-Time Traffic Corridors", 
     "🎟️ Pass Verification & Gate Barrier", 
     "📊 Operator Infrastructure Telemetry"
 ])
 
 # ------------------------------------------
-# TAB 1: 3D SATELLITE MAP & NAVIGATION
+# TAB 1: 3D MAP & NAVIGATION
 # ------------------------------------------
 with tab1:
     if emergency_wave:
@@ -283,7 +282,7 @@ with tab1:
     map_col, pass_col = st.columns([2, 1])
 
     with map_col:
-        st.subheader("🛰️ Live 3D Extruded Building Map")
+        st.subheader("🗺️ Live 3D Extruded Building Map")
         
         # Prepare 3D Data for PyDeck
         hubs_df = pd.DataFrame(list(hubs_dict.values()))
@@ -314,7 +313,8 @@ with tab1:
             width_min_pixels=5,
         )
 
-        view_style = "mapbox://styles/mapbox/satellite-v9" if map_style == "Satellite Hybrid 3D" else "mapbox://styles/mapbox/dark-v11"
+        # FIX: Use Carto free styles directly to prevent Mapbox blank map errors
+        view_style = "road" if map_style == "Road Mode 3D" else "dark"
 
         view_state = pdk.ViewState(
             latitude=(start_coords[0] + end_coords[0]) / 2,
@@ -408,17 +408,5 @@ with tab4:
     o1.metric("Total Infrastructure", f"{tot_cap} Slots")
     o2.metric("Occupied Infrastructure", f"{tot_occ} Vehicles")
     o3.metric("Network Utilization", f"{util_rate}%")
-    o4.metric("Est. Hourly Venue Revenue", f"₹{tot_occ * 50}")
-    
-    st.markdown("---")
-    st.write("### 🏢 Facility Capacity Breakdowns")
-    for hname, hdata in all_hubs.items():
-        occ, tot = hdata["occupied"], hdata["total_slots"]
-        pct = min(1.0, max(0.0, occ / tot)) if tot > 0 else 0.0
-        c1, c2 = st.columns([1, 2])
-        with c1:
-            st.write(f"**{hname}**")
-            st.caption(f"{occ} / {tot} slots occupied")
-        with c2:
-            st.progress(pct)
+    o4.metric("Est. Hourly Venue Revenue", f"Which line are you looking for? If it's from a specific problem, code block, or text you were working on, share the context or prompt you're referring to and I'll help you locate or fix it right away!
     
