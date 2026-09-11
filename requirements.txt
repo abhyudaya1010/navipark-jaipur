@@ -1,8 +1,6 @@
 streamlit
-networkx
 folium
 streamlit-folium
-osmnx
-geopy
 qrcode
 pillow
+supabase
