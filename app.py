@@ -471,5 +471,5 @@ with tab4:
                 st.caption(f"{occ} / {tot} slots filled")
             with c_bar:
                 st.progress(pct)
-            
+                
             
