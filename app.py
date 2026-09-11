@@ -1,6 +1,5 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import json
 import pydeck as pdk
 import qrcode
 import io
@@ -9,15 +8,20 @@ import math
 import random
 import requests
 import pandas as pd
+import json
 from supabase import create_client, Client
 
 # ==========================================
-# 1. STREAMLIT CONFIG & HIGH-CONTRAST GLASS UI
+# 1. STREAMLIT CONFIG & PWA MANIFEST
 # ==========================================
 st.set_page_config(
-    # ==========================================
-# PWA (PROGRESSIVE WEB APP) MANIFEST INJECTION
-# ==========================================
+    page_title="NaviPark 3D - Smart Mobility & Traffic Network",
+    page_icon="🚘",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# PWA Manifest Injection
 pwa_manifest = {
     "name": "NaviPark 3D Jaipur",
     "short_name": "NaviPark",
@@ -40,24 +44,81 @@ pwa_manifest = {
     ]
 }
 
-# JavaScript to inject the manifest into the Streamlit parent iframe
 js_code = f"""
 <script>
     const manifest = {json.dumps(pwa_manifest)};
     const blob = new Blob([JSON.stringify(manifest)], {{type: 'application/json'}});
     const manifestURL = URL.createObjectURL(blob);
-    
-    // Target the parent window (since Streamlit runs in an iframe)
     const parentDocument = window.parent.document;
-    
-    // Remove existing manifest if present during hot-reloads
     const existing = parentDocument.querySelector('link[rel="manifest"]');
     if (existing) {{ existing.remove(); }}
-    
     const link = parentDocument.createElement('link');
     link.rel = 'manifest';
     link.href = manifestURL;
     parentDocument.head.appendChild(link);
+</script>
+"""
+components.html(js_code, height=0)
+
+# ==========================================
+# 2. HIGH-CONTRAST GLASS UI STYLES
+# ==========================================
+st.markdown("""
+    <style>
+    .stApp {
+        background: linear-gradient(135deg, #070A12 0%, #0F172A 50%, #030712 100%);
+        color: #F8FAFC;
+    }
+    .main-title {
+        font-size: 2.6rem;
+        font-weight: 900;
+        background: linear-gradient(90deg, #38BDF8 0%, #818CF8 50%, #C084FC 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0px;
+        letter-spacing: -0.5px;
+    }
+    .sub-title {
+        font-size: 1.05rem;
+        color: #94A3B8;
+        font-weight: 500;
+        margin-bottom: 20px;
+    }
+    div[data-testid="stMetricValue"] {
+        font-size: 1.8rem !important;
+        font-weight: 800 !important;
+        color: #38BDF8 !important;
+    }
+    .stMetric {
+        background: rgba(15, 23, 42, 0.75) !important;
+        border: 1px solid rgba(56, 189, 248, 0.2) !important;
+        backdrop-filter: blur(16px);
+        border-radius: 16px !important;
+        padding: 16px !important;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    }
+    section[data-testid="stSidebar"] {
+        background-color: rgba(15, 23, 42, 0.9) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: rgba(30, 41, 59, 0.5);
+        padding: 8px;
+        border-radius: 14px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 10px;
+        color: #94A3B8;
+        font-weight: 600;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #2563EB !important;
+        color: #FFFFFF !important;
+        box-shadow: 0 0 15px rgba(37, 99, 235, 0.5);
+    }
+    </style>
+""", unsafe_allow_html=True)
 </script>
 """
 
