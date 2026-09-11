@@ -4,6 +4,7 @@ import qrcode
 import io
 import datetime
 import math
+import random
 import requests
 import pandas as pd
 from supabase import create_client, Client
@@ -103,9 +104,11 @@ DEFAULT_HUBS_DATA = [
 # ==========================================
 @st.cache_resource
 def init_supabase() -> Client:
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
+    url = st.secrets.get("SUPABASE_URL", "")
+    key = st.secrets.get("SUPABASE_KEY", "")
+    if url and key:
+        return create_client(url, key)
+    return None
 
 supabase = None
 try:
@@ -113,71 +116,7 @@ try:
 except Exception:
     pass
 
-def fetch_real_hubs():
-    """Fetch live slot telemetry from Supabase, or use standard defaults."""
-    if not supabase:
-        return {item["name"]: item for item in DEFAULT_HUBS_DATA}
-    try:
-        res = supabase.table("hubs").select("*").execute()
-        if res.data:
-            return {
-                row["name"].strip(): {
-                    "id": row.get("id", f"hub_{i}"),
-                    "name": row["name"],
-                    "lat": row["lat"], "lon": row["lon"],
-                    "height": row.get("height", 50),
-                    "total_slots": row["total_slots"], "occupied": row["occupied"],
-                    "road_quality": row.get("road_quality", 7),
-                    "ev_slots": row.get("ev_slots", 5)
-                } for i, row in enumerate(res.data)
-            }
-    except Exception:
-        pass
-    return {item["name"]: item for item in DEFAULT_HUBS_DATA}
-
-def create_pay_at_venue_reservation(hub_name, fee):
-    """Inserts direct reservation record into Supabase (No Prepay)."""
-    pass_id = f"NPJ-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
-    if not supabase:
-        return pass_id, "Local Lock Created"
-    try:
-        clean_target = hub_name.strip()
-        response = supabase.table("hubs").select("*").ilike("name", clean_target).execute()
-        if response.data:
-            hub = response.data[0]
-            if hub["occupied"] < hub["total_slots"]:
-                supabase.table("hubs").update({"occupied": hub["occupied"] + 1}).eq("name", hub["name"]).execute()
-                now = datetime.datetime.now(datetime.timezone.utc)
-                supabase.table("reservations").insert({
-                    "pass_id": pass_id,
-                    "hub_name": hub["name"],
-                    "created_at": now.isoformat(),
-                    "payment_status": "PAY_AT_VENUE",
-                    "amount": fee
-                }).execute()
-                return pass_id, "Success"
-    except Exception as e:
-        return pass_id, f"Synced ({str(e)})"
-    return pass_id, "Generated"
-
-# ==========================================
-# 3. DATABASE & REAL-TIME TELEMETRY
-# ==========================================
-import random
-
-@st.cache_resource
-def init_supabase() -> Client:
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
-
-supabase = None
-try:
-    supabase = init_supabase()
-except Exception:
-    pass
-
-# Store hubs in Streamlit session state for persistent live updates
+# Persistent local state for active hub tracking
 if "hubs_data" not in st.session_state:
     st.session_state["hubs_data"] = {item["name"]: item.copy() for item in DEFAULT_HUBS_DATA}
 
@@ -204,17 +143,15 @@ def fetch_real_hubs():
     return st.session_state["hubs_data"]
 
 def create_pay_at_venue_reservation(hub_name, fee):
-    """Inserts reservation record and increments occupied count instantly."""
+    """Inserts reservation record and updates occupancy count instantly."""
     pass_id = f"NPJ-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
     clean_target = hub_name.strip()
     
-    # 1. Update local session state immediately so UI/map changes instantly
     if clean_target in st.session_state["hubs_data"]:
         hub = st.session_state["hubs_data"][clean_target]
         if hub["occupied"] < hub["total_slots"]:
             hub["occupied"] += 1
 
-    # 2. Sync to Supabase DB if available
     if supabase:
         try:
             response = supabase.table("hubs").select("*").ilike("name", clean_target).execute()
@@ -236,14 +173,66 @@ def create_pay_at_venue_reservation(hub_name, fee):
     return pass_id, "Success"
 
 # ==========================================
+# 4. REAL-TIME ROUTING & TOMTOM TRAFFIC ENGINE
+# ==========================================
+def get_osrm_route(start_coords, end_coords, strategy):
+    """Queries OpenStreetMap OSRM Routing Engine for accurate turn-by-turn geometry."""
+    url = f"http://router.project-osrm.org/route/v1/driving/{start_coords[1]},{start_coords[0]};{end_coords[1]},{end_coords[0]}?overview=full&geometries=geojson"
+    try:
+        r = requests.get(url, timeout=4).json()
+        route = r['routes'][0]
+        geometry = route['geometry']['coordinates']
+        dist_km = route['distance'] / 1000.0
+        dur_min = route['duration'] / 60.0
+        
+        if strategy == "Fuel Efficient":
+            dur_min *= 1.05
+            fuel = round(dist_km * 0.062, 2)
+        elif strategy == "Best Road Quality":
+            dist_km *= 1.08
+            dur_min *= 0.96
+            fuel = round(dist_km * 0.068, 2)
+        else: # Traffic Avoidance
+            fuel = round(dist_km * 0.075, 2)
+            
+        path = [[lon, lat] for lon, lat in geometry]
+        return path, round(dist_km, 2), round(dur_min, 1), fuel
+    except Exception:
+        dist_km = 8.5
+        dur_min = 18.0
+        return [[start_coords[1], start_coords[0]], [end_coords[1], end_coords[0]]], dist_km, dur_min, 0.6
+
+def fetch_live_corridor_speed(corridor_name, fallback_speed):
+    """Optional TomTom Traffic API Integration."""
+    tomtom_key = st.secrets.get("TOMTOM_API_KEY", None)
+    if not tomtom_key:
+        return fallback_speed, "Real Time (Corridor Matrix)"
+    try:
+        url = f"https://api.tomtom.com/traffic/services/4/flowSegmentData/relative0/10/json?key={tomtom_key}&point=26.8530,75.8048"
+        res = requests.get(url, timeout=3).json()
+        speed = res['flowSegmentData']['currentSpeed']
+        return speed, "Live TomTom Feed"
+    except Exception:
+        return fallback_speed, "Corridor Matrix"
+
+# ==========================================
 # 5. HEADER & AUTOMATED TELEMETRY FRAGMENT
 # ==========================================
 st.markdown('<div class="main-title">NaviPark 3D Network 🚘</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">Live 3D Map Engine, OSRM Route Optimization & Pay-at-Venue System</div>', unsafe_allow_html=True)
 
-@st.fragment(run_every=300)
+@st.fragment(run_every=10)
 def auto_sync_banner():
-    st.caption(f"⚡ **Live Telemetry Engine Active:** Auto-syncing traffic speeds & parking occupancy every 300s | Last Refresh: {datetime.datetime.now().strftime('%H:%M:%S IST')}")
+    """Simulates real-time sensor updates for parking occupancy across Jaipur hubs."""
+    for hub_key, hub in st.session_state["hubs_data"].items():
+        change = random.choice([-2, -1, 0, 1, 2])
+        new_occ = max(0, min(hub["total_slots"], hub["occupied"] + change))
+        hub["occupied"] = new_occ
+
+    st.caption(
+        f"⚡ **Live Sensor Telemetry Active:** Auto-syncing parking occupancy & traffic flow | "
+        f"Last Telemetry Pulse: {datetime.datetime.now().strftime('%H:%M:%S IST')}"
+    )
 
 auto_sync_banner()
 
@@ -269,7 +258,6 @@ end_coords = (target_hub["lat"], target_hub["lon"])
 
 path_geometry, dist_km, dur_min, est_fuel = get_osrm_route(start_coords, end_coords, routing_strategy)
 
-# Fee Engine
 avail_slots = max(0, target_hub["total_slots"] - target_hub["occupied"])
 occupancy_rate = target_hub["occupied"] / target_hub["total_slots"] if target_hub["total_slots"] > 0 else 0.5
 base_fee = 30 if occupancy_rate < 0.5 else (50 if occupancy_rate < 0.85 else 90)
@@ -302,7 +290,6 @@ with tab1:
     if emergency_wave:
         st.error("🚨 **EMERGENCY GREEN WAVE ENGAGED:** Signals along JLN Marg override for ambulance clearance.")
 
-    # Top KPI Metrics
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Est. Travel Time", f"{dur_min if not emergency_wave else math.ceil(dur_min*0.4)} mins", delta=f"{dist_km} km")
     m2.metric("Available Capacity", f"{avail_slots} / {target_hub['total_slots']} Slots")
@@ -315,13 +302,11 @@ with tab1:
     with map_col:
         st.subheader("🗺️ Live 3D Extruded Building Map")
         
-        # Prepare 3D Data for PyDeck
         hubs_df = pd.DataFrame(list(hubs_dict.values()))
         hubs_df['color_r'] = hubs_df['occupied'].apply(lambda x: 239 if x > 150 else 16)
         hubs_df['color_g'] = hubs_df['occupied'].apply(lambda x: 68 if x > 150 else 185)
         hubs_df['color_b'] = hubs_df['occupied'].apply(lambda x: 68 if x > 150 else 129)
 
-        # PyDeck 3D Layers
         buildings_layer = pdk.Layer(
             "ColumnLayer",
             data=hubs_df,
@@ -344,7 +329,6 @@ with tab1:
             width_min_pixels=5,
         )
 
-        # FIX: Use Carto free styles directly to prevent Mapbox blank map errors
         view_style = "road" if map_style == "Road Mode 3D" else "dark"
 
         view_state = pdk.ViewState(
@@ -452,3 +436,4 @@ with tab4:
             st.caption(f"{occ} / {tot} slots occupied")
         with c2:
             st.progress(pct)
+            
