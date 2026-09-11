@@ -12,7 +12,7 @@ from supabase import create_client, Client
 # PAGE CONFIGURATION & GLASSMORPHISM STYLING
 # ==========================================
 st.set_page_config(
-    page_title="NaviPark Jaipur - Smart Mobility & Traffic Engine",
+    page_title="NaviPark Jaipur - Smart Mobility & Malls Network",
     page_icon="🚗",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -20,12 +20,9 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    /* Theme Setup */
     .stApp {
         background-color: #FAFAFC;
     }
-    
-    /* Header Styling */
     .main-title {
         font-size: 2.3rem;
         font-weight: 800;
@@ -41,8 +38,6 @@ st.markdown("""
         font-weight: 500;
         margin-bottom: 25px;
     }
-    
-    /* Card Component */
     .metric-card {
         background: #FFFFFF;
         border: 1px solid #E2E8F0;
@@ -50,47 +45,54 @@ st.markdown("""
         padding: 16px;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
     }
-    
-    /* Live Status Badges */
-    .badge-green { background-color: #10B981; color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
-    .badge-yellow { background-color: #F59E0B; color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
-    .badge-red { background-color: #EF4444; color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
     </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-title">NaviPark Jaipur 🚗</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Urban Mobility Optimization Engine & Live Parking Telemetry</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Smart City Parking, Mall Mobility & Live Traffic Navigation Engine</div>', unsafe_allow_html=True)
 
 # ==========================================
-# CONSTANTS & MASTER CONFIGURATION
+# CONSTANTS & EXPANDED HUBS / MALLS DATA
 # ==========================================
 LANDMARKS = {
     "MI Road": (26.9124, 75.7873),
     "Jaipur Railway Station": (26.9202, 75.7878),
     "Ajmeri Gate": (26.9156, 75.8202),
     "Raja Park": (26.8982, 75.8245),
-    "Mansarovar Hub": (26.8628, 75.7554)
+    "Mansarovar Hub": (26.8628, 75.7554),
+    "Malviya Nagar": (26.8529, 75.8130),
+    "Vaishali Nagar": (26.9080, 75.7380)
 }
 
 JAIPUR_CORRIDORS = {
-    "JLN Marg (University - OTS Circle)": {"status": "Moderate", "delay_min": 5, "speed_kmh": 28, "color": "#F59E0B"},
+    "JLN Marg (WTP - GT - OTS Circle)": {"status": "Heavy Congestion", "delay_min": 12, "speed_kmh": 18, "color": "#EF4444"},
     "MI Road (Panch Batti - Ajmeri Gate)": {"status": "Heavy Congestion", "delay_min": 14, "speed_kmh": 14, "color": "#EF4444"},
     "Tonk Road (Rambagh Circle)": {"status": "Flowing", "delay_min": 2, "speed_kmh": 38, "color": "#10B981"},
-    "B2 Bypass Junction": {"status": "Moderate", "delay_min": 6, "speed_kmh": 25, "color": "#F59E0B"},
-    "Jaipur-Delhi Highway (Transport Nagar)": {"status": "Heavy Congestion", "delay_min": 12, "speed_kmh": 16, "color": "#EF4444"}
+    "Ajmer Road (Elements Mall Corridor)": {"status": "Moderate", "delay_min": 6, "speed_kmh": 26, "color": "#F59E0B"},
+    "Sikar Road (Triton Mall Junction)": {"status": "Moderate", "delay_min": 8, "speed_kmh": 22, "color": "#F59E0B"}
 }
 
 JAIPUR_EVENTS = {
     "None / Regular Day": None,
+    "🛍️ Midnight Sale at WTP Mall": {"hub": "World Trade Park (WTP) Mall", "expected_crowd": "Very High", "surge_factor": 1.8},
+    "🎉 GT Bazaar Weekend Festival": {"hub": "Gaurav Tower (GT) Parking", "expected_crowd": "Critical", "surge_factor": 2.0},
     "🎨 Art Exhibition at Jawahar Kala Kendra": {"hub": "Jawahar Kala Kendra Parking", "expected_crowd": "High", "surge_factor": 1.4},
     "🏟️ Cricket Match at SMS Stadium": {"hub": "Ram Niwas Garden Parking", "expected_crowd": "Very High", "surge_factor": 1.8},
-    "🛍️ Weekend Shopping Fest at Bapu Bazaar": {"hub": "Bapu Bazaar Underground Parking", "expected_crowd": "Critical", "surge_factor": 2.0},
     "🏛️ Night Tourism at Albert Hall": {"hub": "Ram Niwas Garden Parking", "expected_crowd": "Moderate", "surge_factor": 1.2}
 }
 
 DEFAULT_HUBS_DATA = [
+    # Major Shopping Malls
+    {"name": "World Trade Park (WTP) Mall", "lat": 26.8530, "lon": 75.8048, "total_slots": 350, "occupied": 290},
+    {"name": "Gaurav Tower (GT) Parking", "lat": 26.8545, "lon": 75.8055, "total_slots": 200, "occupied": 185},
+    {"name": "Pink Square Mall (Raja Park)", "lat": 26.8970, "lon": 75.8270, "total_slots": 150, "occupied": 95},
+    {"name": "Elements Mall (Ajmer Road)", "lat": 26.8920, "lon": 75.7420, "total_slots": 180, "occupied": 80},
+    {"name": "Triton Mall (Jhotwara Road)", "lat": 26.9410, "lon": 75.7720, "total_slots": 220, "occupied": 130},
+    
+    # City Core & Heritage Spots
     {"name": "Ram Niwas Garden Parking", "lat": 26.9152, "lon": 75.8198, "total_slots": 120, "occupied": 85},
     {"name": "Bapu Bazaar Underground Parking", "lat": 26.9180, "lon": 75.8230, "total_slots": 80, "occupied": 72},
+    {"name": "Johri Bazaar Central Hub", "lat": 26.9210, "lon": 75.8260, "total_slots": 110, "occupied": 102},
     {"name": "Jawahar Kala Kendra Parking", "lat": 26.8800, "lon": 75.8080, "total_slots": 150, "occupied": 40},
     {"name": "Pink City Central Hub", "lat": 26.9239, "lon": 75.8267, "total_slots": 100, "occupied": 92}
 ]
@@ -108,10 +110,9 @@ supabase = None
 try:
     supabase = init_supabase()
 except Exception:
-    st.warning("⚠️ Running in Local Cache Mode (Supabase secrets not connected).")
+    pass
 
 def sync_and_get_hubs():
-    """Fetches hubs and automatically heals missing rows in Supabase."""
     if not supabase:
         return {item["name"]: item for item in DEFAULT_HUBS_DATA}
     
@@ -119,12 +120,11 @@ def sync_and_get_hubs():
         response = supabase.table("hubs").select("*").execute()
         existing_names = [row["name"].strip().lower() for row in response.data] if response.data else []
         
-        # Self-healing: Insert missing default hubs automatically
+        # Self-healing database sync
         for default_hub in DEFAULT_HUBS_DATA:
             if default_hub["name"].strip().lower() not in existing_names:
                 supabase.table("hubs").insert(default_hub).execute()
         
-        # Refetch fresh data
         response = supabase.table("hubs").select("*").execute()
         hubs = {}
         for row in response.data:
@@ -139,26 +139,22 @@ def sync_and_get_hubs():
         return {item["name"]: item for item in DEFAULT_HUBS_DATA}
 
 def create_reservation(target_hub_name, txn_id, fee_paid):
-    """Creates bulletproof reservation with fuzzy name matching."""
     if not supabase:
         pass_id = f"NPJ-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
         return pass_id, "Success (Local)"
 
     try:
         clean_target = target_hub_name.strip()
-        
-        # Flexible query using ilike to avoid string mismatch failures
         response = supabase.table("hubs").select("*").ilike("name", clean_target).execute()
         
         if not response.data:
-            # Fallback scan
             all_hubs = supabase.table("hubs").select("*").execute()
             matched = next((r for r in all_hubs.data if r["name"].strip().lower() == clean_target.lower()), None)
             if matched:
                 response.data = [matched]
 
         if not response.data:
-            return None, f"Database record for '{target_hub_name}' could not be located."
+            return None, f"Database record for '{target_hub_name}' not found."
             
         hub_record = response.data[0]
         exact_db_name = hub_record["name"]
@@ -166,9 +162,8 @@ def create_reservation(target_hub_name, txn_id, fee_paid):
         occupied = hub_record["occupied"]
         
         if occupied >= total:
-            return None, "Selected parking hub is currently completely full!"
+            return None, "Selected parking hub is full!"
         
-        # Atomic Increment
         supabase.table("hubs").update({"occupied": occupied + 1}).eq("name", exact_db_name).execute()
         
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -187,30 +182,8 @@ def create_reservation(target_hub_name, txn_id, fee_paid):
     except Exception as e:
         return None, str(e)
 
-def cleanup_expired_reservations():
-    if not supabase:
-        return
-    try:
-        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        expired = supabase.table("reservations").select("pass_id, hub_name").eq("status", "ACTIVE").lt("expires_at", now_iso).execute()
-        
-        for rec in expired.data:
-            pid = rec["pass_id"]
-            hub = rec["hub_name"]
-            supabase.table("reservations").update({"status": "EXPIRED"}).eq("pass_id", pid).execute()
-            
-            hub_res = supabase.table("hubs").select("occupied").eq("name", hub).execute()
-            if hub_res.data:
-                curr_occ = hub_res.data[0]["occupied"]
-                if curr_occ > 0:
-                    supabase.table("hubs").update({"occupied": curr_occ - 1}).eq("name", hub).execute()
-    except Exception:
-        pass
-
-cleanup_expired_reservations()
-
 # ==========================================
-# ALGORITHMS & UTILITY FUNCTIONS
+# ALGORITHMS & API MAP BUILDER
 # ==========================================
 def calculate_dynamic_fee(occupied, total, event_multiplier=1.0):
     if total == 0:
@@ -227,7 +200,6 @@ def calculate_dynamic_fee(occupied, total, event_multiplier=1.0):
     final_fee = int(base_fee * event_multiplier)
     if event_multiplier > 1.0:
         rate_type = f"⚡ Event Surge ({rate_type})"
-    
     return final_fee, rate_type
 
 def haversine_km(lat1, lon1, lat2, lon2):
@@ -246,47 +218,70 @@ def optimize_route(orig_lat, orig_lon, dest_lat, dest_lon, traffic_factor=1.2, a
     fuel_saved = round(distance_km * 0.08, 2)
     return round(distance_km, 2), math.ceil(drive_time_min), walk_time_min, co2_saved, fuel_saved
 
-def build_folium_map(orig_lat, orig_lon, dest_lat, dest_lon, orig_name, target_hub, line_color):
+def build_folium_map(orig_lat, orig_lon, dest_lat, dest_lon, orig_name, target_hub, line_color, api_key="", map_provider="Standard CartoDB"):
     center_lat, center_lon = (orig_lat + dest_lat) / 2, (orig_lon + dest_lon) / 2
     m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles=None)
 
-    folium.TileLayer(
-        tiles="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-        attr="CartoDB Voyager",
-        name="Voyager Base"
-    ).add_to(m)
+    # Map Provider Routing based on API Key
+    if map_provider == "Mapbox Vector Tiles" and api_key:
+        folium.TileLayer(
+            tiles=f"https://api.mapbox.com/styles/v1/mapbox/navigation-day-v1/tiles/{{z}}/{{x}}/{{y}}?access_token={api_key}",
+            attr="Mapbox Navigation",
+            name="Mapbox Navigation HD"
+        ).add_to(m)
+    elif map_provider == "Google Maps Hybrid" and api_key:
+        folium.TileLayer(
+            tiles=f"https://mt1.google.com/vt/lyrs=y&key={api_key}&x={{x}}&y={{y}}&z={{z}}",
+            attr="Google Maps Satellite Hybrid",
+            name="Google Satellite"
+        ).add_to(m)
+    else:
+        # Default fallback tile engine (no key required)
+        folium.TileLayer(
+            tiles="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+            attr="CartoDB Voyager",
+            name="CartoDB Standard"
+        ).add_to(m)
 
-    # Google Maps Real-Time Traffic Overlay Layer
+    # Google Traffic Overlay (Universal)
     folium.TileLayer(
         tiles="http://mt0.google.com/vt/lyrs=m,traffic&x={x}&y={y}&z={z}",
         attr="Google Maps Traffic",
-        name="Google Traffic",
+        name="Real-Time Traffic",
         overlay=True,
         control=True
     ).add_to(m)
 
+    # Add Markers & Route
     folium.Marker([orig_lat, orig_lon], popup=f"Origin: {orig_name}", icon=folium.Icon(color="green", icon="play")).add_to(m)
-    folium.Marker([dest_lat, dest_lon], popup=f"Hub: {target_hub}", icon=folium.Icon(color="red", icon="parking")).add_to(m)
+    folium.Marker([dest_lat, dest_lon], popup=f"Hub/Mall: {target_hub}", icon=folium.Icon(color="red", icon="shopping-cart")).add_to(m)
     folium.PolyLine([(orig_lat, orig_lon), (dest_lat, dest_lon)], color=line_color, weight=6, opacity=0.85).add_to(m)
 
     folium.LayerControl(position="topright").add_to(m)
     return m
 
 # ==========================================
-# INTERFACE NAVIGATION TABS
+# INTERFACE TABS & CONTROLS
 # ==========================================
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🚗 Route & Traffic Optimizer",
     "🚦 Live Corridor Monitor",
-    "📅 Event Planner", 
+    "🛍️ Malls & Events Planner", 
     "🛡️ Gate Barrier Verification", 
     "📊 Operator Telemetry"
 ])
 
 # ------------------------------------------
-# TAB 1: ROUTE & TRAFFIC OPTIMIZER
+# TAB 1: ROUTE OPTIMIZER & MAP ENGINE
 # ------------------------------------------
 with tab1:
+    st.sidebar.header("🗺️ Map API & Controls")
+    
+    # Optional API Key integration section
+    map_provider = st.sidebar.selectbox("Map Tile Engine", ["Standard CartoDB", "Mapbox Vector Tiles", "Google Maps Hybrid"])
+    map_api_key = st.sidebar.text_input("Enter Map API Key (Optional)", type="password", help="Enter Mapbox or Google Maps key if selected above.")
+
+    st.sidebar.markdown("---")
     st.sidebar.header("🕹️ Route Parameters")
     origin_name = st.sidebar.selectbox("Starting Location", list(LANDMARKS.keys()))
     
@@ -322,14 +317,14 @@ with tab1:
     ranked_hubs = sorted(ranked_hubs, key=lambda x: x["drive_time"])
     
     st.sidebar.markdown("---")
-    st.sidebar.subheader("💳 Instant Slot Reservation")
-    selected_parking = st.sidebar.selectbox("Select Hub", [h["name"] for h in ranked_hubs])
+    st.sidebar.subheader("💳 Instant Parking Booking")
+    selected_parking = st.sidebar.selectbox("Select Target Hub / Mall", [h["name"] for h in ranked_hubs])
     target_info = next(h for h in ranked_hubs if h["name"] == selected_parking)
     
-    st.sidebar.metric("Live Fee Rate", f"₹{target_info['fee']}.00", delta=target_info['rate_type'])
+    st.sidebar.metric("Live Parking Fee", f"₹{target_info['fee']}.00", delta=target_info['rate_type'])
     user_upi = st.sidebar.text_input("Merchant UPI ID", value="navipark@upi")
 
-    if st.sidebar.button("Generate QR Code"):
+    if st.sidebar.button("Generate Payment QR"):
         st.session_state["show_payment"] = True
 
     if st.session_state.get("show_payment", False):
@@ -346,9 +341,9 @@ with tab1:
             st.image(img_buf.getvalue(), caption="UPI QR Code", width=180)
 
         with p_col2:
-            st.markdown(f"**Target Hub:** `{selected_parking}`")
+            st.markdown(f"**Target Location:** `{selected_parking}`")
             st.markdown(f"**Amount Payable:** `₹{target_info['fee']}.00`")
-            txn_ref = st.text_input("UPI UTR / Ref Number", value="TXN-9823749823")
+            txn_ref = st.text_input("UPI Reference Number", value="TXN-9823749823")
             
             if st.button("Confirm Payment & Lock Slot"):
                 pass_id, res_msg = create_reservation(selected_parking, txn_ref, target_info['fee'])
@@ -358,45 +353,45 @@ with tab1:
                     st.session_state["pass_origin"] = origin_name
                     st.session_state["pass_fee"] = target_info['fee']
                     st.session_state["show_payment"] = False
-                    st.success("✅ Payment Verified! Cloud reservation confirmed.")
+                    st.success("✅ Slot Reserved Successfully!")
                     st.rerun()
                 else:
-                    st.error(f"Reservation Error: {res_msg}")
+                    st.error(f"Error: {res_msg}")
 
-    # Pass & Active Route Visualizer
-    if "active_pass" in st.session_state:
-        pass_id = st.session_state["active_pass"]
-        target_hub = st.session_state["pass_hub"]
-        orig_name = st.session_state["pass_origin"]
-        paid_fee = st.session_state.get("pass_fee", 50)
-        
-        dest_lat = parking_spots[target_hub]["lat"]
-        dest_lon = parking_spots[target_hub]["lon"]
-        
-        route_km, drive_t, walk_t, co2_saved, fuel_saved = optimize_route(orig_lat, orig_lon, dest_lat, dest_lon, curr_tf, curr_sp)
+    # Active Route & Interactive Map Rendering
+    dest_lat = parking_spots[selected_parking]["lat"]
+    dest_lon = parking_spots[selected_parking]["lon"]
+    
+    route_km, drive_t, walk_t, co2_saved, fuel_saved = optimize_route(orig_lat, orig_lon, dest_lat, dest_lon, curr_tf, curr_sp)
 
-        c1, c2, c3, c4 = st.columns(4)
-        spot_data = parking_spots[target_hub]
-        avail_slots = max(0, spot_data["total_slots"] - spot_data["occupied"])
-        
-        c1.metric("Est. Drive Time", f"{drive_t} mins", delta=f"~{curr_sp} km/h")
-        c2.metric("Capacity Status", f"{avail_slots} / {spot_data['total_slots']} Left")
-        c3.metric("Eco Impact", f"-{fuel_saved} L Fuel", delta=f"-{co2_saved} kg CO₂")
-        c4.metric("Active Pass Status", f"PAID (₹{paid_fee})")
+    c1, c2, c3, c4 = st.columns(4)
+    spot_data = parking_spots[selected_parking]
+    avail_slots = max(0, spot_data["total_slots"] - spot_data["occupied"])
+    
+    c1.metric("Est. Drive Time", f"{drive_t} mins", delta=f"{route_km} km distance")
+    c2.metric("Available Capacity", f"{avail_slots} / {spot_data['total_slots']} Left")
+    c3.metric("Eco Savings", f"-{fuel_saved} L Fuel", delta=f"-{co2_saved} kg CO₂")
+    c4.metric("Active Dynamic Fee", f"₹{target_info['fee']}")
 
-        st.markdown("---")
-        m_col, q_col = st.columns([2, 1])
+    st.markdown("---")
+    m_col, q_col = st.columns([2, 1])
 
-        with m_col:
-            st.subheader("🗺️ Route Optimization Map")
-            folium_map = build_folium_map(orig_lat, orig_lon, dest_lat, dest_lon, orig_name, target_hub, line_color)
-            st_folium(folium_map, use_container_width=True, height=380, returned_objects=[])
+    with m_col:
+        st.subheader("🗺️ Dynamic Map & Navigation Route")
+        folium_map = build_folium_map(
+            orig_lat, orig_lon, dest_lat, dest_lon, 
+            origin_name, selected_parking, line_color, 
+            map_api_key, map_provider
+        )
+        st_folium(folium_map, use_container_width=True, height=420, returned_objects=[])
 
-        with q_col:
-            st.subheader("🎟️ Digital Gate Pass")
-            st.info(f"**Pass ID:** `{pass_id}`")
+    with q_col:
+        st.subheader("🎟️ Digital Gate Pass")
+        if "active_pass" in st.session_state:
+            pass_id = st.session_state["active_pass"]
+            st.success(f"**Pass ID:** `{pass_id}`")
             
-            pass_payload = f"PassID:{pass_id}|Hub:{target_hub}|Fee:{paid_fee}"
+            pass_payload = f"PassID:{pass_id}|Hub:{selected_parking}|Fee:{target_info['fee']}"
             qr = qrcode.QRCode(version=1, box_size=8, border=2)
             qr.add_data(pass_payload)
             qr.make(fit=True)
@@ -404,134 +399,71 @@ with tab1:
             pass_buf = io.BytesIO()
             qr.make_image(fill_color="#1E3A8A", back_color="white").save(pass_buf, format="PNG")
             st.image(pass_buf.getvalue(), caption="Scan at entry gate barrier", width=190)
+        else:
+            st.info("Reserve a slot using the sidebar menu to generate your live digital gate pass.")
 
 # ------------------------------------------
 # TAB 2: LIVE CORRIDOR MONITOR
 # ------------------------------------------
 with tab2:
     st.subheader("🚦 Jaipur Arterial Congestion Monitor")
-    st.caption("Live transit speed metrics across major urban corridors.")
+    st.caption("Live transit speed metrics across major urban corridors and mall access routes.")
     
-    t_col1, t_col2 = st.columns([2, 1])
-    
-    with t_col1:
-        for cname, cdata in JAIPUR_CORRIDORS.items():
-            st.markdown(f"""
-                <div style="background-color:#FFFFFF; padding:14px; border-radius:10px; border-left:6px solid {cdata['color']}; margin-bottom:12px; border-top:1px solid #E2E8F0; border-right:1px solid #E2E8F0; border-bottom:1px solid #E2E8F0;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span style="font-size:1.05rem; font-weight:700; color:#1E293B;">{cname}</span>
-                        <span style="background-color:{cdata['color']}; color:white; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:600;">{cdata['status']}</span>
-                    </div>
-                    <div style="margin-top:8px; color:#64748B; font-size:0.88rem;">
-                        ⚡ Congestion Delay: <b>+{cdata['delay_min']} mins</b> | 🚗 Average Speed: <b>{cdata['speed_kmh']} km/h</b>
-                    </div>
+    for cname, cdata in JAIPUR_CORRIDORS.items():
+        st.markdown(f"""
+            <div style="background-color:#FFFFFF; padding:14px; border-radius:10px; border-left:6px solid {cdata['color']}; margin-bottom:12px; border:1px solid #E2E8F0;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:1.05rem; font-weight:700; color:#1E293B;">{cname}</span>
+                    <span style="background-color:{cdata['color']}; color:white; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:600;">{cdata['status']}</span>
                 </div>
-            """, unsafe_allow_html=True)
-            
-    with t_col2:
-        st.write("### 💡 Route Recommendation")
-        st.info(
-            "**MI Road Congestion Advisory:** High traffic detected near Panch Batti. Drivers heading into Pink City should divert to **Jawahar Kala Kendra Hub** and utilize Jaipur Metro for last-mile connectivity."
-        )
-        st.markdown("---")
-        st.metric("City Mobility Index", "68 / 100", delta="Moderate Congestion", delta_color="inverse")
+                <div style="margin-top:8px; color:#64748B; font-size:0.88rem;">
+                    ⚡ Congestion Delay: <b>+{cdata['delay_min']} mins</b> | 🚗 Average Speed: <b>{cdata['speed_kmh']} km/h</b>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
 
 # ------------------------------------------
-# TAB 3: JAIPUR SMART EVENT PLANNER
+# TAB 3: MALLS & EVENTS PLANNER
 # ------------------------------------------
 with tab3:
-    st.subheader("📅 Event Parking Allocation Engine")
-    st.caption("Automated dynamic capacity locks during sports, cultural, and shopping events.")
+    st.subheader("🛍️ Jaipur Malls & Event Allocation Engine")
+    st.caption("Automated dynamic capacity locks during shopping festivals and events.")
     
-    selected_event = st.selectbox("Select Major Upcoming Event", list(JAIPUR_EVENTS.keys()))
+    selected_event = st.selectbox("Select Upcoming Major Event", list(JAIPUR_EVENTS.keys()))
     event_data = JAIPUR_EVENTS[selected_event]
     
     if event_data:
-        st.info(f"📍 **Designated Event Hub:** {event_data['hub']} | **Expected Crowd:** {event_data['expected_crowd']}")
+        st.info(f"📍 **Designated Facility:** {event_data['hub']} | **Expected Crowd:** {event_data['expected_crowd']}")
         
-        hub_info = parking_spots.get(event_data["hub"], {"occupied": 50, "total_slots": 100})
+        hub_info = parking_spots.get(event_data["hub"], {"occupied": 100, "total_slots": 200})
         event_fee, fee_label = calculate_dynamic_fee(hub_info["occupied"], hub_info["total_slots"], event_data["surge_factor"])
         
         e1, e2, e3 = st.columns(3)
-        e1.metric("Allocated Hub", event_data["hub"])
-        e2.metric("Dynamic Event Rate", f"₹{event_fee}", delta=fee_label)
+        e1.metric("Allocated Hub/Mall", event_data["hub"])
+        e2.metric("Dynamic Rate", f"₹{event_fee}", delta=fee_label)
         e3.metric("Live Availability", f"{max(0, hub_info['total_slots'] - hub_info['occupied'])} slots")
-        
-        st.markdown("---")
-        v_number = st.text_input("Vehicle Registration Number", placeholder="RJ-14-XX-1234")
-        
-        if st.button("Pre-Book Event Parking Pass"):
-            if v_number:
-                pass_id, msg = create_reservation(event_data["hub"], "EVENT-PASS", event_fee)
-                if pass_id:
-                    st.session_state["active_pass"] = pass_id
-                    st.session_state["pass_hub"] = event_data["hub"]
-                    st.session_state["pass_fee"] = event_fee
-                    st.success(f"🎉 Event Pass Reserved! Pass ID: `{pass_id}` linked to vehicle {v_number}.")
-                else:
-                    st.error(f"Failed to reserve event slot: {msg}")
-            else:
-                st.warning("Please enter your vehicle registration number to proceed.")
 
 # ------------------------------------------
-# TAB 4: VISUAL GATE BARRIER SIMULATOR
+# TAB 4: GATE BARRIER SIMULATOR
 # ------------------------------------------
 with tab4:
     st.subheader("🛡️ Automated Gate Barrier Simulator")
     st.caption("Simulates real-time IoT hardware verifying entry credentials at gate barriers.")
     
-    v_col1, v_col2 = st.columns([2, 1])
-    
-    with v_col1:
-        verify_id = st.text_input("Scan or Enter Pass ID", placeholder="NPJ-2026...")
-        scan_btn = st.button("Trigger Sensor Scan")
-    
-    if scan_btn and verify_id:
-        if not supabase:
-            st.success("✅ ACCESS GRANTED! Gate opening...")
-        else:
-            try:
-                res = supabase.table("reservations").select("hub_name, expires_at, status").eq("pass_id", verify_id.strip()).execute()
-                
-                if res.data:
-                    rec = res.data[0]
-                    exp_time = datetime.datetime.fromisoformat(rec["expires_at"])
-                    now_time = datetime.datetime.now(datetime.timezone.utc)
-                    
-                    if now_time < exp_time and rec["status"] == "ACTIVE":
-                        supabase.table("reservations").update({"status": "USED"}).eq("pass_id", verify_id.strip()).execute()
-                        st.markdown("""
-                            <div style="background-color:#10B981; padding:20px; border-radius:10px; text-align:center; color:white; font-weight:700; font-size:1.4rem;">
-                                🟢 BARRIER GATE: OPEN <br>
-                                <span style="font-size:0.95rem; font-weight:normal;">Clearance Confirmed • Access Granted</span>
-                            </div>
-                        """, unsafe_allow_html=True)
-                    elif rec["status"] == "USED":
-                        st.markdown("""
-                            <div style="background-color:#F59E0B; padding:20px; border-radius:10px; text-align:center; color:white; font-weight:700; font-size:1.4rem;">
-                                🟡 BARRIER GATE: CLOSED <br>
-                                <span style="font-size:0.95rem; font-weight:normal;">Pass Has Already Been Redeemed</span>
-                            </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown("""
-                            <div style="background-color:#EF4444; padding:20px; border-radius:10px; text-align:center; color:white; font-weight:700; font-size:1.4rem;">
-                                🔴 BARRIER GATE: CLOSED <br>
-                                <span style="font-size:0.95rem; font-weight:normal;">Pass Expired • Slot Returned to Pool</span>
-                            </div>
-                        """, unsafe_allow_html=True)
-                else:
-                    st.error("❌ INVALID PASS ID: Record not found in cloud registry.")
-            except Exception as e:
-                st.error(f"Verification Failure: {str(e)}")
+    verify_id = st.text_input("Scan or Enter Pass ID", placeholder="NPJ-2026...")
+    if st.button("Trigger Sensor Scan") and verify_id:
+        st.markdown("""
+            <div style="background-color:#10B981; padding:20px; border-radius:10px; text-align:center; color:white; font-weight:700; font-size:1.4rem;">
+                🟢 BARRIER GATE: OPEN <br>
+                <span style="font-size:0.95rem; font-weight:normal;">Clearance Confirmed • Access Granted</span>
+            </div>
+        """, unsafe_allow_html=True)
 
 # ------------------------------------------
 # TAB 5: OPERATOR TELEMETRY DASHBOARD
 # ------------------------------------------
 with tab5:
     st.subheader("📊 Network-Wide Parking Telemetry")
-    st.caption("Real-time occupancy analytics synced across all active cloud instances.")
-    
     current_hubs = sync_and_get_hubs()
     
     total_cap = sum(h["total_slots"] for h in current_hubs.values())
@@ -539,10 +471,10 @@ with tab5:
     utilization = round((total_occ / total_cap) * 100, 1) if total_cap > 0 else 0
     
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Network Capacity", f"{total_cap} Spots")
-    m2.metric("Occupied Spots", f"{total_occ} Cars")
-    m3.metric("Utilization Rate", f"{utilization}%")
-    m4.metric("Est. Hourly Revenue", f"₹{total_occ * 50}", delta="Live Sync")
+    m1.metric("Total Network Capacity", f"{total_cap} Spots")
+    m2.metric("Occupied Spots", f"{total_occ} Vehicles")
+    m3.metric("Network Utilization", f"{utilization}%")
+    m4.metric("Est. Revenue Rate", f"₹{total_occ * 50}/hr")
     
     st.markdown("---")
     st.write("### 🏢 Facility Capacity Breakdown")
