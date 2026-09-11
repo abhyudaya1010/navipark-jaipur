@@ -63,7 +63,6 @@ TRANSLATIONS = {
         "tab4": "🛍️ Malls & Events Planner",
         "tab5": "🛡️ Gate Barrier Verification",
         "tab6": "📊 Operator Telemetry",
-        "map_engine": "Map Tile Engine",
         "starting_loc": "Starting Location",
         "traffic_density": "City Traffic Density",
         "target_hub": "Select Target Hub / Mall",
@@ -83,7 +82,6 @@ TRANSLATIONS = {
         "tab4": "🛍️ मॉल और इवेंट्स प्लानर",
         "tab5": "🛡️ गेट बैरियर सत्यापन",
         "tab6": "📊 ऑपरेटर टेलीमेट्री",
-        "map_engine": "मैप इंजन चुनें",
         "starting_loc": "प्रारंभिक स्थान",
         "traffic_density": "यातायात घनत्व",
         "target_hub": "पार्किंग या मॉल चुनें",
@@ -127,14 +125,11 @@ JAIPUR_EVENTS = {
 }
 
 DEFAULT_HUBS_DATA = [
-    # Major Malls & Smart Hubs
     {"name": "World Trade Park (WTP) Mall", "lat": 26.8530, "lon": 75.8048, "total_slots": 350, "occupied": 290, "ev_slots": 20, "ev_charger_kw": 60},
     {"name": "Gaurav Tower (GT) Parking", "lat": 26.8545, "lon": 75.8055, "total_slots": 200, "occupied": 185, "ev_slots": 10, "ev_charger_kw": 30},
     {"name": "Pink Square Mall (Raja Park)", "lat": 26.8970, "lon": 75.8270, "total_slots": 150, "occupied": 95, "ev_slots": 8, "ev_charger_kw": 22},
     {"name": "Elements Mall (Ajmer Road)", "lat": 26.8920, "lon": 75.7420, "total_slots": 180, "occupied": 80, "ev_slots": 12, "ev_charger_kw": 50},
     {"name": "Triton Mall (Jhotwara Road)", "lat": 26.9410, "lon": 75.7720, "total_slots": 220, "occupied": 130, "ev_slots": 15, "ev_charger_kw": 50},
-    
-    # Heritage Spots
     {"name": "Ram Niwas Garden Parking", "lat": 26.9152, "lon": 75.8198, "total_slots": 120, "occupied": 85, "ev_slots": 5, "ev_charger_kw": 22},
     {"name": "Bapu Bazaar Underground Parking", "lat": 26.9180, "lon": 75.8230, "total_slots": 80, "occupied": 72, "ev_slots": 0, "ev_charger_kw": 0},
     {"name": "Johri Bazaar Central Hub", "lat": 26.9210, "lon": 75.8260, "total_slots": 110, "occupied": 102, "ev_slots": 4, "ev_charger_kw": 15},
@@ -264,42 +259,20 @@ def optimize_route(orig_lat, orig_lon, dest_lat, dest_lon, traffic_factor=1.2, a
     fuel_saved = round(distance_km * 0.08, 2)
     return round(distance_km, 2), math.ceil(drive_time_min), walk_time_min, co2_saved, fuel_saved
 
-def build_folium_map(orig_lat, orig_lon, dest_lat, dest_lon, orig_name, target_hub, line_color, api_key="", map_provider="Standard CartoDB"):
+def build_folium_map(orig_lat, orig_lon, dest_lat, dest_lon, orig_name, target_hub, line_color):
     center_lat, center_lon = (orig_lat + dest_lat) / 2, (orig_lon + dest_lon) / 2
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles=None)
-
-    if map_provider == "Mapbox Vector Tiles" and api_key:
-        folium.TileLayer(
-            tiles=f"https://api.mapbox.com/styles/v1/mapbox/navigation-day-v1/tiles/{{z}}/{{x}}/{{y}}?access_token={api_key}",
-            attr="Mapbox Navigation",
-            name="Mapbox Navigation HD"
-        ).add_to(m)
-    elif map_provider == "Google Maps Hybrid" and api_key:
-        folium.TileLayer(
-            tiles=f"https://mt1.google.com/vt/lyrs=y&key={api_key}&x={{x}}&y={{y}}&z={{z}}",
-            attr="Google Maps Satellite Hybrid",
-            name="Google Satellite"
-        ).add_to(m)
-    else:
-        folium.TileLayer(
-            tiles="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-            attr="CartoDB Voyager",
-            name="CartoDB Standard"
-        ).add_to(m)
-
-    folium.TileLayer(
-        tiles="http://mt0.google.com/vt/lyrs=m,traffic&x={x}&y={y}&z={z}",
-        attr="Google Maps Traffic",
-        name="Real-Time Traffic",
-        overlay=True,
-        control=True
-    ).add_to(m)
+    
+    # Standard OpenStreetMap layer - completely free with no API keys required
+    m = folium.Map(
+        location=[center_lat, center_lon], 
+        zoom_start=13, 
+        tiles="OpenStreetMap"
+    )
 
     folium.Marker([orig_lat, orig_lon], popup=f"Origin: {orig_name}", icon=folium.Icon(color="green", icon="play")).add_to(m)
     folium.Marker([dest_lat, dest_lon], popup=f"Hub/Mall: {target_hub}", icon=folium.Icon(color="red", icon="shopping-cart")).add_to(m)
     folium.PolyLine([(orig_lat, orig_lon), (dest_lat, dest_lon)], color=line_color, weight=6, opacity=0.85).add_to(m)
 
-    folium.LayerControl(position="topright").add_to(m)
     return m
 
 # ==========================================
@@ -323,12 +296,6 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 # TAB 1: ROUTE OPTIMIZER & MAP ENGINE
 # ------------------------------------------
 with tab1:
-    st.sidebar.markdown("---")
-    st.sidebar.header("🗺️ Map API & Controls")
-    
-    map_provider = st.sidebar.selectbox(T["map_engine"], ["Standard CartoDB", "Mapbox Vector Tiles", "Google Maps Hybrid"])
-    map_api_key = st.sidebar.text_input("Map API Key (Optional)", type="password")
-
     st.sidebar.markdown("---")
     st.sidebar.header("🕹️ Route Parameters")
     origin_name = st.sidebar.selectbox(T["starting_loc"], list(LANDMARKS.keys()))
@@ -433,8 +400,7 @@ with tab1:
         st.subheader("🗺️ Dynamic Map & Navigation Route")
         folium_map = build_folium_map(
             orig_lat, orig_lon, dest_lat, dest_lon, 
-            origin_name, selected_parking, line_color, 
-            map_api_key, map_provider
+            origin_name, selected_parking, line_color
         )
         st_folium(folium_map, use_container_width=True, height=420, returned_objects=[])
 
@@ -472,7 +438,6 @@ with tab2:
         base_occ = hub_data["occupied"]
         cap = hub_data["total_slots"]
 
-        # Generate realistic time-series predictive data
         hours = [datetime.datetime.now() + datetime.timedelta(minutes=30*i) for i in range(7)]
         labels = [h.strftime("%I:%M %p") for h in hours]
         
