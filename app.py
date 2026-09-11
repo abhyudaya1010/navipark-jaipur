@@ -15,7 +15,7 @@ from supabase import create_client, Client
 # 1. STREAMLIT CONFIG & PWA MANIFEST
 # ==========================================
 st.set_page_config(
-    page_title="NaviPark 3D - Smart Mobility & Traffic Network",
+    page_title="NaviPark 3D - Smart Mobility & Landmarks",
     page_icon="🚘",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -25,7 +25,7 @@ st.set_page_config(
 pwa_manifest_json = json.dumps({
     "name": "NaviPark 3D Jaipur",
     "short_name": "NaviPark",
-    "description": "Smart Mobility & Traffic Network for Jaipur",
+    "description": "Smart Mobility, Landmarks & Traffic Network for Jaipur",
     "start_url": "./",
     "display": "standalone",
     "background_color": "#070A12",
@@ -121,14 +121,25 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Default Seed Dataset for Jaipur Hubs
+# Expanded Seed Dataset: Jaipur Hubs & Major Historic/Commercial Landmarks
 DEFAULT_HUBS_DATA = [
-    {"name": "Gaurav Tower (GT) Hub", "lat": 26.8528, "lon": 75.8052, "height": 80, "total_slots": 150, "occupied": 130, "road_quality": 8, "ev_slots": 12},
-    {"name": "World Trade Park (WTP) Hub", "lat": 26.8538, "lon": 75.8058, "height": 110, "total_slots": 300, "occupied": 240, "road_quality": 9, "ev_slots": 25},
-    {"name": "Raja Park Commercial Hub", "lat": 26.8917, "lon": 75.8239, "height": 60, "total_slots": 100, "occupied": 85, "road_quality": 6, "ev_slots": 8},
-    {"name": "Jaipur Junction Station Hub", "lat": 26.9196, "lon": 75.7878, "height": 95, "total_slots": 250, "occupied": 210, "road_quality": 7, "ev_slots": 15},
-    {"name": "MI Road Shopping District", "lat": 26.9154, "lon": 75.8118, "height": 70, "total_slots": 120, "occupied": 105, "road_quality": 8, "ev_slots": 10},
-    {"name": "MNIT Campus Smart Hub", "lat": 26.8627, "lon": 75.8122, "height": 55, "total_slots": 80, "occupied": 42, "road_quality": 9, "ev_slots": 20}
+    # Commercial & Transportation Hubs
+    {"name": "Gaurav Tower (GT) Hub", "category": "Commercial", "lat": 26.8528, "lon": 75.8052, "height": 80, "total_slots": 150, "occupied": 130, "road_quality": 8, "ev_slots": 12},
+    {"name": "World Trade Park (WTP) Hub", "category": "Commercial", "lat": 26.8538, "lon": 75.8058, "height": 110, "total_slots": 300, "occupied": 240, "road_quality": 9, "ev_slots": 25},
+    {"name": "Raja Park Commercial Hub", "category": "Commercial", "lat": 26.8917, "lon": 75.8239, "height": 60, "total_slots": 100, "occupied": 85, "road_quality": 6, "ev_slots": 8},
+    {"name": "Jaipur Junction Station Hub", "category": "Transit", "lat": 26.9196, "lon": 75.7878, "height": 95, "total_slots": 250, "occupied": 210, "road_quality": 7, "ev_slots": 15},
+    {"name": "MI Road Shopping District", "category": "Commercial", "lat": 26.9154, "lon": 75.8118, "height": 70, "total_slots": 120, "occupied": 105, "road_quality": 8, "ev_slots": 10},
+    {"name": "MNIT Campus Smart Hub", "category": "Education", "lat": 26.8627, "lon": 75.8122, "height": 55, "total_slots": 80, "occupied": 42, "road_quality": 9, "ev_slots": 20},
+    
+    # Famous Jaipur Landmarks & Tourist Heritage Sites
+    {"name": "Hawa Mahal (Palace of Winds)", "category": "Landmark", "lat": 26.9239, "lon": 75.8267, "height": 90, "total_slots": 90, "occupied": 78, "road_quality": 7, "ev_slots": 6},
+    {"name": "City Palace Jaipur", "category": "Landmark", "lat": 26.9258, "lon": 75.8237, "height": 100, "total_slots": 120, "occupied": 95, "road_quality": 8, "ev_slots": 10},
+    {"name": "Amer Fort (Amber)", "category": "Landmark", "lat": 26.9855, "lon": 75.8513, "height": 130, "total_slots": 200, "occupied": 160, "road_quality": 8, "ev_slots": 12},
+    {"name": "Jal Mahal (Water Palace)", "category": "Landmark", "lat": 26.9534, "lon": 75.8462, "height": 75, "total_slots": 110, "occupied": 70, "road_quality": 8, "ev_slots": 8},
+    {"name": "Albert Hall Museum", "category": "Landmark", "lat": 26.9116, "lon": 75.8195, "height": 85, "total_slots": 140, "occupied": 90, "road_quality": 9, "ev_slots": 14},
+    {"name": "Nahargarh Fort", "category": "Landmark", "lat": 26.9372, "lon": 75.8155, "height": 120, "total_slots": 150, "occupied": 115, "road_quality": 6, "ev_slots": 5},
+    {"name": "Jantar Mantar Observatory", "category": "Landmark", "lat": 26.9248, "lon": 75.8246, "height": 65, "total_slots": 85, "occupied": 60, "road_quality": 8, "ev_slots": 6},
+    {"name": "Birla Mandir (Laxmi Narayan)", "category": "Landmark", "lat": 26.8924, "lon": 75.8156, "height": 70, "total_slots": 130, "occupied": 95, "road_quality": 9, "ev_slots": 10}
 ]
 
 # ==========================================
@@ -162,6 +173,7 @@ def fetch_real_hubs():
                     row["name"].strip(): {
                         "id": row.get("id", f"hub_{i}"),
                         "name": row["name"],
+                        "category": row.get("category", "General"),
                         "lat": row["lat"], "lon": row["lon"],
                         "height": row.get("height", 50),
                         "total_slots": row["total_slots"], 
@@ -205,10 +217,10 @@ def create_pay_at_venue_reservation(hub_name, fee):
     return pass_id, "Success"
 
 # ==========================================
-# 4. ROUTE CALCULATION (OSRM ENGINE)
+# 4. ROUTE CALCULATION (OSRM SHORTEST PATH ENGINE)
 # ==========================================
 def get_osrm_route(start_lat, start_lon, end_lat, end_lon):
-    """Fetches real driving geometry and distance using open OSRM routing."""
+    """Fetches real driving geometry, distance, and time using open OSRM routing."""
     url = f"http://router.project-osrm.org/route/v1/driving/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson"
     try:
         r = requests.get(url, timeout=4)
@@ -224,20 +236,20 @@ def get_osrm_route(start_lat, start_lon, end_lat, end_lon):
                 return path, round(dist_km, 2), round(duration_min, 1)
     except Exception:
         pass
-    # Fallback straight line
+    # Fallback straight line calculation
     return [[start_lat, start_lon], [end_lat, end_lon]], 5.0, 12.0
 
 # ==========================================
 # 5. HEADER & AUTOMATED TELEMETRY FRAGMENT
 # ==========================================
 st.markdown('<div class="main-title">NaviPark 3D Network 🚘</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Live 3D Map Engine, OSRM Route Optimization & Pay-at-Venue System</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Jaipur Landmarks, Shortest Route Navigation & Live Parking Network</div>', unsafe_allow_html=True)
 
 @st.fragment(run_every=10)
 def auto_sync_banner():
     """Simulates active parking occupancy changes by mutating session state directly."""
     for name, hub in st.session_state["hubs_data"].items():
-        delta = random.randint(-3, 3)
+        delta = random.randint(-2, 2)
         hub["occupied"] = max(10, min(hub["total_slots"], hub["occupied"] + delta))
 
     st.caption(
@@ -251,7 +263,7 @@ auto_sync_banner()
 # 6. APPLICATION NAVIGATION TABS
 # ==========================================
 tab1, tab2, tab3, tab4 = st.tabs([
-    "🗺️ Interactive 3D Map", 
+    "🗺️ Interactive 3D Map & Routes", 
     "🎟️ Pay-at-Venue Reservation", 
     "🤖 AI Mobility Strategist", 
     "📊 City Network Analytics"
@@ -260,7 +272,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 current_hubs = fetch_real_hubs()
 
 # ------------------------------------------
-# TAB 1: INTERACTIVE 3D MAP
+# TAB 1: INTERACTIVE 3D MAP & ROUTE NAVIGATOR
 # ------------------------------------------
 with tab1:
     col_map, col_control = st.columns([3, 1])
@@ -280,6 +292,7 @@ with tab1:
             
         map_data.append({
             "name": h["name"],
+            "category": h.get("category", "General"),
             "lat": h["lat"],
             "lon": h["lon"],
             "height": h["height"] * 3,
@@ -292,32 +305,34 @@ with tab1:
     df_map = pd.DataFrame(map_data)
     
     with col_control:
-        st.subheader("Route Navigator")
-        user_origin = st.selectbox("Select Your Origin Point", [
-            "Malaviya Nagar (Near Airport)",
-            "Vaishali Nagar",
-            "C-Scheme",
-            "Mansarovar Metro Station"
-        ])
+        st.subheader("Shortest Route Finder")
         
         origin_coords = {
-            "Malaviya Nagar (Near Airport)": [26.8389, 75.8056],
+            "Jaipur International Airport (JAI)": [26.8242, 75.8122],
+            "Jaipur Junction Railway Station": [26.9196, 75.7878],
+            "Sindhi Camp Bus Stand": [26.9240, 75.7989],
+            "Malaviya Nagar": [26.8389, 75.8056],
             "Vaishali Nagar": [26.9124, 75.7433],
             "C-Scheme": [26.9098, 75.8006],
             "Mansarovar Metro Station": [26.8819, 75.7663]
         }
         
-        dest_hub_name = st.selectbox("Destination Hub", list(current_hubs.keys()))
+        user_origin = st.selectbox("Starting Location", list(origin_coords.keys()))
+        
+        dest_hub_name = st.selectbox("Select Destination / Landmark", list(current_hubs.keys()))
         target_hub = current_hubs[dest_hub_name]
         
         orig_lat, orig_lon = origin_coords[user_origin]
         route_path, dist_km, duration_min = get_osrm_route(orig_lat, orig_lon, target_hub["lat"], target_hub["lon"])
         
-        st.metric("Driving Distance", f"{dist_km} km")
-        st.metric("Est. Travel Time", f"{duration_min} mins")
+        st.metric("Shortest Distance", f"{dist_km} km")
+        st.metric("Est. Driving Time", f"{duration_min} mins")
+        
+        st.markdown(f"**Selected Hub Type:** `{target_hub.get('category', 'General')}`")
+        st.markdown(f"**Live Parking Status:** `{target_hub['total_slots'] - target_hub['occupied']} slots free`")
         
         st.write("---")
-        st.caption("🟢 Green: Low Occupancy | 🟠 Yellow: Moderate | 🔴 Red: Near Capacity")
+        st.caption("🟢 Green: Low Occupancy | 🟠 Yellow: Moderate | 🔴 Red: High Traffic")
 
     with col_map:
         # PyDeck 3D Layer Construction
@@ -326,7 +341,7 @@ with tab1:
             data=df_map,
             get_position=["lon", "lat"],
             get_elevation="height",
-            radius=80,
+            radius=90,
             get_fill_color="color",
             pickable=True,
             auto_highlight=True,
@@ -343,8 +358,8 @@ with tab1:
         )
         
         view_state = pdk.ViewState(
-            latitude=26.8850,
-            longitude=75.8050,
+            latitude=target_hub["lat"],
+            longitude=target_hub["lon"],
             zoom=12,
             pitch=45,
             bearing=15
@@ -353,7 +368,7 @@ with tab1:
         st.pydeck_chart(pdk.Deck(
             layers=[column_layer, path_layer],
             initial_view_state=view_state,
-            tooltip={"html": "<b>{name}</b><br/>Free Slots: <b>{available}</b> / {total_slots}"}
+            tooltip={"html": "<b>{name}</b> ({category})<br/>Free Slots: <b>{available}</b> / {total_slots}"}
         ))
 
 # ------------------------------------------
@@ -361,12 +376,12 @@ with tab1:
 # ------------------------------------------
 with tab2:
     st.subheader("Instant Pay-at-Venue Digital Gate Pass")
-    st.write("Reserve your parking slot in advance and pay directly when you enter the venue.")
+    st.write("Reserve parking at major Jaipur landmarks and commercial centers before you arrive.")
     
     col_res1, col_res2 = st.columns([1, 1])
     
     with col_res1:
-        res_hub = st.selectbox("Select Target Hub for Reservation", list(current_hubs.keys()), key="res_hub_select")
+        res_hub = st.selectbox("Target Landmark / Parking Hub", list(current_hubs.keys()), key="res_hub_select")
         selected_data = current_hubs[res_hub]
         avail_count = selected_data["total_slots"] - selected_data["occupied"]
         
@@ -378,7 +393,7 @@ with tab2:
         
         st.markdown(f"### Total Entry Fee: **₹{base_fee}** *(Pay at Gate)*")
         
-        if st.button("Generate Pass & Reserve Slot", type="primary"):
+        if st.button("Generate Gate Pass & Reserve", type="primary"):
             if avail_count > 0:
                 pass_id, msg = create_pay_at_venue_reservation(res_hub, base_fee)
                 st.session_state["last_pass"] = {
@@ -390,7 +405,7 @@ with tab2:
                 }
                 st.success(f"Slot Reserved Successfully! Pass ID: {pass_id}")
             else:
-                st.error("Selected Hub is completely full! Please pick an alternate nearby hub.")
+                st.error("Selected Hub is completely full! Please pick an alternate nearby location.")
 
     with col_res2:
         if "last_pass" in st.session_state:
@@ -403,47 +418,54 @@ with tab2:
             buf = io.BytesIO()
             qr_img.save(buf, format="PNG")
             
-            st.image(buf.getvalue(), width=220, caption=f"Scan at {lp['hub']} Gate")
+            st.image(buf.getvalue(), width=220, caption=f"Scan at {lp['hub']} Entry Gate")
             st.code(
                 f"PASS ID : {lp['pass_id']}\n"
+                f"DESTINATION: {lp['hub']}\n"
                 f"VEHICLE : {lp['vehicle']}\n"
                 f"AMOUNT  : ₹{lp['fee']} (Pay at Gate)\n"
                 f"ISSUED  : {lp['time']}"
             )
         else:
-            st.info("Complete the form on the left to generate your digital entry pass.")
+            st.info("Complete the reservation form on the left to generate your digital gate pass.")
 
 # ------------------------------------------
 # TAB 3: AI MOBILITY STRATEGIST
 # ------------------------------------------
 with tab3:
     st.subheader("🤖 AI Mobility Strategist")
-    st.write("Ask for personalized traffic advice, parking timing, or route recommendations in Jaipur.")
+    st.write("Get real-time answers for visiting Jaipur's famous landmarks, avoiding traffic bottlenecks, and optimal parking times.")
     
-    query = st.text_input("Enter your travel question:", value="When is the best time to visit WTP to get easy parking?")
+    query = st.text_input("Ask a question about visiting Jaipur landmarks:", value="What is the shortest path and best parking strategy for Hawa Mahal and City Palace?")
     
-    if st.button("Get AI Analysis"):
-        with st.spinner("Analyzing real-time grid patterns..."):
-            if "wtp" in query.lower() or "gaurav tower" in query.lower() or "gt" in query.lower():
+    if st.button("Get Mobility Strategy"):
+        with st.spinner("Analyzing Old City (Badi Chaupar) traffic nodes..."):
+            if "hawa mahal" in query.lower() or "city palace" in query.lower() or "old city" in query.lower():
                 st.markdown("""
-                **💡 Strategic AI Recommendation:**
-                * **Peak Jam Windows:** 5:30 PM - 8:30 PM on weekends due to mall rush on Malaviya Nagar Flyover.
-                * **Optimal Arrival Window:** Arrive before **4:15 PM** or after **8:45 PM** to guarantee instant ground-floor slots.
-                * **Alternate Hub:** If WTP is above 90% capacity, park at **MNIT Campus Smart Hub** (8 mins walk) for faster exit access.
+                **💡 Strategic AI Recommendation for Old Walled City:**
+                * **Traffic Constraint:** High density around Badi Chaupar and Johari Bazar between **11:00 AM - 6:00 PM**.
+                * **Shortest Path:** Route via **MI Road -> Ajmeri Gate -> Tripolia Bazar** to bypass Badi Chaupar traffic.
+                * **Optimal Parking:** Park at **City Palace Hub** or **Albert Hall Hub** (and take a 5-min e-rickshaw) to avoid inner-market parking delays.
+                """)
+            elif "amer" in query.lower() or "nahargarh" in query.lower() or "jal mahal" in query.lower():
+                st.markdown("""
+                **💡 Strategic AI Recommendation for Northern Fort Corridor:**
+                * **Route Optimization:** Take **Amer Road via Jal Mahal**. Nahargarh Fort requires navigating winding ghat roads—drive carefully during peak sunset hours (5:00 PM - 7:00 PM).
+                * **Parking Strategy:** Park at **Jal Mahal Hub** first for quick photo stops, then proceed directly to **Amer Fort Underground Parking**.
                 """)
             else:
                 st.markdown("""
                 **💡 Strategic AI Recommendation:**
-                * **Grid Status:** Primary arterial corridors (JLN Marg, Tonk Road) are operating smoothly.
-                * **EV Charging Tip:** MI Road Shopping District and WTP Hubs currently have open EV fast-charging ports.
-                * **General Advice:** Use the OSRM route planner in Tab 1 to bypass bottleneck intersections during peak evening hours.
+                * **Grid Status:** Primary arterial corridors (JLN Marg, Tonk Road, MI Road) are operating normally.
+                * **EV Charging Tip:** Fast charging is available at WTP, Albert Hall, and Amer Fort Hubs.
+                * **Shortest Path:** Select your start location in Tab 1 to generate live step-by-step OSRM driving geometry.
                 """)
 
 # ------------------------------------------
 # TAB 4: CITY NETWORK ANALYTICS
 # ------------------------------------------
 with tab4:
-    st.subheader("📊 Network Health & Smart Infrastructure Analytics")
+    st.subheader("📊 Jaipur Network Health & Landmark Analytics")
     
     total_capacity = sum(h["total_slots"] for h in current_hubs.values())
     total_occupied = sum(h["occupied"] for h in current_hubs.values())
@@ -451,23 +473,24 @@ with tab4:
     net_utilization = (total_occupied / total_capacity) * 100
     
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-    col_m1.metric("Total Hubs Online", len(current_hubs))
-    col_m2.metric("Network Slots", f"{total_occupied} / {total_capacity}")
+    col_m1.metric("Landmarks & Hubs Online", len(current_hubs))
+    col_m2.metric("Total Network Slots", f"{total_occupied} / {total_capacity}")
     col_m3.metric("System Utilization", f"{net_utilization:.1f}%")
     col_m4.metric("EV Chargers Active", total_ev)
     
     st.write("---")
-    st.subheader("Live Hub Status Breakdown")
+    st.subheader("Live Hub & Landmark Breakdown")
     
     analytics_df = pd.DataFrame([
         {
-            "Hub Name": h["name"],
+            "Landmark / Hub Name": h["name"],
+            "Category": h.get("category", "General"),
             "Occupied": h["occupied"],
             "Capacity": h["total_slots"],
             "Free Slots": h["total_slots"] - h["occupied"],
-            "Utilization Rate": f"{(h['occupied']/h['total_slots'])*100:.1f}%",
-            "Road Quality Index": f"{h['road_quality']}/10",
-            "EV Fast Ports": h["ev_slots"]
+            "Utilization": f"{(h['occupied']/h['total_slots'])*100:.1f}%",
+            "Road Index": f"{h['road_quality']}/10",
+            "EV Chargers": h["ev_slots"]
         }
         for h in current_hubs.values()
     ])
