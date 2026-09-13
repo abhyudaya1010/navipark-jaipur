@@ -20,7 +20,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Build JSON string safely
 pwa_manifest_json = json.dumps({
     "name": "NaviPark 3D Jaipur Pro",
     "short_name": "NaviPark Pro",
@@ -31,7 +30,7 @@ pwa_manifest_json = json.dumps({
     "theme_color": "#38BDF8",
     "icons": [
         {
-            "src": "https://cdn-icons-png.flaticon.com/512/1048/1048314.png", 
+            "src": "https://cdn-icons-png.flaticon.com/512/1048/1048314.png",
             "sizes": "192x192",
             "type": "image/png"
         },
@@ -43,7 +42,6 @@ pwa_manifest_json = json.dumps({
     ]
 })
 
-# Pure JavaScript injection for PWA support
 js_code = f"""
 <script>
     const manifest = {pwa_manifest_json};
@@ -117,17 +115,20 @@ st.markdown("""
         color: #FFFFFF !important;
         box-shadow: 0 0 15px rgba(37, 99, 235, 0.5);
     }
-    .feature-card {
-        background: rgba(30, 41, 59, 0.6);
-        border: 1px solid rgba(56, 189, 248, 0.2);
-        padding: 16px;
-        border-radius: 12px;
-        margin-bottom: 12px;
-    }
     </style>
 """, unsafe_allow_html=True)
 
-# Default dataset with full metadata fallback
+# Global Constants / Shared State
+ORIGIN_COORDS = {
+    "Jaipur International Airport (JAI)": [26.8242, 75.8122],
+    "Jaipur Junction Railway Station": [26.9196, 75.7878],
+    "Sindhi Camp Bus Stand": [26.9240, 75.7989],
+    "Malaviya Nagar": [26.8389, 75.8056],
+    "Vaishali Nagar": [26.9124, 75.7433],
+    "C-Scheme": [26.9098, 75.8006],
+    "Mansarovar Metro Station": [26.8819, 75.7663]
+}
+
 DEFAULT_HUBS_DATA = [
     {"name": "Gaurav Tower (GT) Hub", "category": "Commercial", "lat": 26.8528, "lon": 75.8052, "height": 250, "total_slots": 150, "occupied": 130, "road_quality": 8, "ev_slots": 12, "hourly_rate": 30},
     {"name": "World Trade Park (WTP) Hub", "category": "Commercial", "lat": 26.8538, "lon": 75.8058, "height": 300, "total_slots": 300, "occupied": 240, "road_quality": 9, "ev_slots": 25, "hourly_rate": 40},
@@ -181,7 +182,7 @@ def fetch_real_hubs():
                         "lat": float(row.get("lat", 26.9124)),
                         "lon": float(row.get("lon", 75.7873)),
                         "height": row.get("height", 250),
-                        "total_slots": int(row.get("total_slots", 100)), 
+                        "total_slots": int(row.get("total_slots", 100)),
                         "occupied": int(row.get("occupied", 50)),
                         "road_quality": row.get("road_quality", 7),
                         "ev_slots": row.get("ev_slots", 0),
@@ -211,7 +212,7 @@ def create_pay_at_venue_reservation(hub_name, fee):
         "status": "CONFIRMED"
     }
     st.session_state["user_passes"].append(pass_record)
-    return pass_id, "Success"
+    return pass_id
 
 # ==========================================
 # 4. ROUTE ENGINE & ECO CALCULATOR
@@ -224,7 +225,7 @@ def get_osrm_route(start_lat, start_lon, end_lat, end_lon):
             data = r.json()
             if data.get("routes"):
                 route = data["routes"][0]
-                coords = route["geometry"]["coordinates"] # [lon, lat]
+                coords = route["geometry"]["coordinates"]
                 dist_km = route["distance"] / 1000.0
                 duration_min = route["duration"] / 60.0
                 return coords, round(dist_km, 2), round(duration_min, 1)
@@ -233,14 +234,13 @@ def get_osrm_route(start_lat, start_lon, end_lat, end_lon):
     return [[start_lon, start_lat], [end_lon, end_lat]], 5.0, 12.0
 
 def calculate_trip_impact(dist_km, vehicle_type="Petrol Car"):
-    """Calculates fuel cost in INR and CO2 output based on vehicle type."""
     if vehicle_type == "EV":
         cost = dist_km * 1.5
         co2_kg = 0.0
     elif vehicle_type == "Two Wheeler":
         cost = dist_km * 2.5
         co2_kg = dist_km * 0.04
-    else:  # Petrol / Diesel Car
+    else:
         cost = dist_km * 7.5
         co2_kg = dist_km * 0.12
     return round(cost, 1), round(co2_kg, 2)
@@ -252,13 +252,9 @@ current_hubs = fetch_real_hubs()
 # ==========================================
 with st.sidebar:
     st.title("⚙️ Map & Network Controls")
-    
     st.subheader("🔍 Live Map Filters")
-    
-    # Safely build category list using fallback `.get()`
     categories = sorted(list(set(h.get("category", "General") for h in current_hubs.values())))
     selected_cats = st.multiselect("Filter by Category", categories, default=categories)
-    
     min_free_slots = st.slider("Min. Free Slots Required", 0, 50, 0)
     ev_only = st.checkbox("⚡ Show EV Charging Locations Only", value=False)
     
@@ -294,36 +290,26 @@ auto_sync_banner()
 # 7. MAIN APPLICATION TABS
 # ==========================================
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "🗺️ Interactive 3D Route Map", 
-    "🎟️ Digital Gate Pass & Wallet", 
-    "🤖 AI Mobility Strategist", 
+    "🗺️ Interactive 3D Route Map",
+    "🎟️ Digital Gate Pass & Wallet",
+    "🤖 AI Mobility Strategist",
     "🌱 Eco & Trip Cost Calculator",
     "📊 City Network Analytics"
 ])
 
-# ------------------------------------------
 # TAB 1: INTERACTIVE 3D ROUTE MAP
-# ------------------------------------------
 with tab1:
     col_map, col_control = st.columns([3, 1])
-    
-    # Filter hubs based on sidebar controls safely
     map_data = []
     for h in current_hubs.values():
         tot = h.get("total_slots", 100)
         occ = h.get("occupied", 0)
         available = tot - occ
         occupancy_rate = occ / tot if tot > 0 else 0
-        
         category = h.get("category", "General")
         ev_slots = h.get("ev_slots", 0)
         
-        # Apply Sidebar Filters with safe key retrieval
-        if category not in selected_cats:
-            continue
-        if available < min_free_slots:
-            continue
-        if ev_only and ev_slots == 0:
+        if category not in selected_cats or available < min_free_slots or (ev_only and ev_slots == 0):
             continue
 
         if occupancy_rate > 0.85:
@@ -345,29 +331,15 @@ with tab1:
             "ev_slots": ev_slots,
             "color": color
         })
-    
     df_map = pd.DataFrame(map_data)
     
     with col_control:
         st.subheader("Navigation Control")
-        
-        origin_coords = {
-            "Jaipur International Airport (JAI)": [26.8242, 75.8122],
-            "Jaipur Junction Railway Station": [26.9196, 75.7878],
-            "Sindhi Camp Bus Stand": [26.9240, 75.7989],
-            "Malaviya Nagar": [26.8389, 75.8056],
-            "Vaishali Nagar": [26.9124, 75.7433],
-            "C-Scheme": [26.9098, 75.8006],
-            "Mansarovar Metro Station": [26.8819, 75.7663]
-        }
-        
-        user_origin = st.selectbox("Starting Location", list(origin_coords.keys()))
+        user_origin = st.selectbox("Starting Location", list(ORIGIN_COORDS.keys()))
         dest_hub_name = st.selectbox("Select Destination / Landmark", list(current_hubs.keys()))
         target_hub = current_hubs[dest_hub_name]
         
-        orig_lat, orig_lon = origin_coords[user_origin]
-        
-        # Get OSRM Driving Route safely
+        orig_lat, orig_lon = ORIGIN_COORDS[user_origin]
         dest_lat = float(target_hub.get("lat", 26.9124))
         dest_lon = float(target_hub.get("lon", 75.7873))
         route_path, dist_km, duration_min = get_osrm_route(orig_lat, orig_lon, dest_lat, dest_lon)
@@ -375,7 +347,6 @@ with tab1:
         st.metric("Shortest Driving Distance", f"{dist_km} km")
         st.metric("Est. Travel Time", f"{duration_min} mins")
         
-        # Quick Route Simulation Drawer
         with st.expander("🚘 Turn-by-Turn Route Steps"):
             dest_cat = target_hub.get("category", "Landmark")
             avail_slots = target_hub.get("total_slots", 100) - target_hub.get("occupied", 0)
@@ -400,7 +371,6 @@ with tab1:
                 auto_highlight=True,
                 elevation_scale=1,
             )
-            
             route_df = pd.DataFrame([{"path": route_path}])
             path_layer = pdk.Layer(
                 "PathLayer",
@@ -410,17 +380,9 @@ with tab1:
                 width_min_pixels=6,
                 width_max_pixels=10
             )
-            
             mid_lat = (orig_lat + dest_lat) / 2
             mid_lon = (orig_lon + dest_lon) / 2
-            
-            view_state = pdk.ViewState(
-                latitude=mid_lat,
-                longitude=mid_lon,
-                zoom=11,
-                pitch=50,
-                bearing=10
-            )
+            view_state = pdk.ViewState(latitude=mid_lat, longitude=mid_lon, zoom=11, pitch=50, bearing=10)
             
             st.pydeck_chart(pdk.Deck(
                 layers=[column_layer, path_layer],
@@ -428,187 +390,130 @@ with tab1:
                 tooltip={"html": "<b>{name}</b> ({category})<br/>Free Slots: <b>{available}</b> / {total_slots}<br/>⚡ EV Ports: <b>{ev_slots}</b>"}
             ))
         else:
-            st.warning("No landmarks match your active filter criteria! Try broadening your filter settings in the sidebar.")
+            st.warning("No landmarks match your active filter criteria!")
 
-# ------------------------------------------
 # TAB 2: DIGITAL GATE PASS & WALLET
-# ------------------------------------------
 with tab2:
     st.subheader("🎟️ Instant Pay-at-Venue Pass & Digital Wallet")
-    
     col_res1, col_res2 = st.columns([1, 1])
-    
     with col_res1:
         st.markdown("### Generate Gate Pass")
         res_hub = st.selectbox("Target Landmark / Parking Hub", list(current_hubs.keys()), key="res_hub_select")
         selected_data = current_hubs[res_hub]
-        
         tot = selected_data.get("total_slots", 100)
         occ = selected_data.get("occupied", 0)
         avail_count = tot - occ
         rate = selected_data.get("hourly_rate", 30)
         
         st.info(f"📍 **{res_hub}**\n\nSlots Free: **{avail_count} / {tot}** | Rate: **₹{rate}/hr**")
-        
         vehicle_no = st.text_input("Vehicle License Plate", value="RJ-14-CC-2026")
         duration = st.slider("Parking Duration (Hours)", 1, 8, 2)
         base_fee = duration * rate
-        
         st.markdown(f"#### Calculated Fee: **₹{base_fee}** *(Pay at Gate)*")
         
         if st.button("Generate QR Gate Pass", type="primary"):
             if avail_count > 0:
-                pass_id, msg = create_pay_at_venue_reservation(res_hub, base_fee)
+                pass_id = create_pay_at_venue_reservation(res_hub, base_fee)
                 st.session_state["last_pass"] = {
-                    "pass_id": pass_id,
-                    "hub": res_hub,
-                    "vehicle": vehicle_no,
-                    "fee": base_fee,
-                    "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    "pass_id": pass_id, "hub": res_hub, "vehicle": vehicle_no,
+                    "fee": base_fee, "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
                 st.success(f"Pass Generated! ID: {pass_id}")
             else:
-                st.error("Selected location is completely full! Choose another nearby hub.")
+                st.error("Selected location is completely full!")
 
     with col_res2:
         st.markdown("### 💳 Active Pass Wallet")
         if "last_pass" in st.session_state:
             lp = st.session_state["last_pass"]
-            
             qr_payload = f"NAVIPARK_PASS|ID:{lp['pass_id']}|HUB:{lp['hub']}|VEH:{lp['vehicle']}|FEE:{lp['fee']}"
             qr_img = qrcode.make(qr_payload)
             buf = io.BytesIO()
             qr_img.save(buf, format="PNG")
-            
             st.image(buf.getvalue(), width=220, caption=f"Scan at {lp['hub']} Gate")
-            st.code(
-                f"PASS ID : {lp['pass_id']}\n"
-                f"HUB     : {lp['hub']}\n"
-                f"VEHICLE : {lp['vehicle']}\n"
-                f"AMOUNT  : ₹{lp['fee']}\n"
-                f"ISSUED  : {lp['time']}"
-            )
+            st.code(f"PASS ID : {lp['pass_id']}\nHUB     : {lp['hub']}\nVEHICLE : {lp['vehicle']}\nAMOUNT  : ₹{lp['fee']}\nISSUED  : {lp['time']}")
         else:
-            st.info("No active pass generated yet. Use the form on the left to issue a gate pass.")
-
+            st.info("No active pass generated yet.")
         if st.session_state["user_passes"]:
             st.write("---")
             st.markdown("#### 📜 Session Pass History")
-            history_df = pd.DataFrame(st.session_state["user_passes"])
-            st.dataframe(history_df, use_container_width=True)
+            st.dataframe(pd.DataFrame(st.session_state["user_passes"]), use_container_width=True)
 
-# ------------------------------------------
 # TAB 3: AI MOBILITY STRATEGIST
-# ------------------------------------------
 with tab3:
     st.subheader("🤖 AI Mobility & Traffic Strategist")
-    st.write("Ask questions regarding Jaipur traffic patterns, optimal parking slots, or best visiting times.")
-    
     query = st.text_input("Ask a question about visiting Jaipur landmarks:", value="What is the shortest path and best parking strategy for Hawa Mahal and City Palace?")
-    
     if st.button("Generate AI Mobility Strategy"):
         with st.spinner("Analyzing Old City arterial network..."):
-            if "hawa mahal" in query.lower() or "city palace" in query.lower() or "old city" in query.lower():
+            if any(k in query.lower() for k in ["hawa mahal", "city palace", "old city"]):
                 st.markdown("""
                 **💡 Strategic AI Recommendation for Old Walled City:**
                 * **Traffic Density:** Heavy slowdowns near Badi Chaupar between **11:00 AM - 6:00 PM**.
-                * **Shortest Path:** Drive via **MI Road -> Ajmeri Gate -> Tripolia Bazar** to bypass Badi Chaupar congestion.
-                * **Smart Parking Strategy:** Park at **City Palace Hub** or **Albert Hall Hub** (and take a 5-minute e-rickshaw) to bypass narrow alley bottlenecks.
+                * **Shortest Path:** Drive via **MI Road -> Ajmeri Gate -> Tripolia Bazar**.
+                * **Smart Parking Strategy:** Park at **City Palace Hub** or **Albert Hall Hub** (take e-rickshaw).
                 * **EV Availability:** Albert Hall Hub has 14 fast-charging ports available.
-                """)
-            elif "amer" in query.lower() or "nahargarh" in query.lower() or "jal mahal" in query.lower():
-                st.markdown("""
-                **💡 Strategic AI Recommendation for Northern Fort Corridor:**
-                * **Route Optimization:** Take **Amer Road past Jal Mahal**. Sunset hours (5:00 PM - 7:00 PM) experience heavy tourist traffic on Nahargarh winding roads.
-                * **Parking Strategy:** Park at **Jal Mahal Hub** for photography, then proceed directly to **Amer Fort Underground Parking**.
                 """)
             else:
                 st.markdown("""
                 **💡 Strategic AI Recommendation:**
-                * **Network Status:** Major corridors (JLN Marg, Tonk Road, MI Road) are flowing normally.
+                * **Network Status:** Major corridors (JLN Marg, Tonk Road, MI Road) flowing normally.
                 * **EV Charging Tip:** Fast chargers active at WTP, Albert Hall, and Amer Fort Hubs.
-                * **Shortest Path:** Select your start location in Tab 1 to draw real-time driving geometry.
                 """)
 
-# ------------------------------------------
 # TAB 4: ECO & TRIP COST CALCULATOR
-# ------------------------------------------
 with tab4:
     st.subheader("🌱 Smart Trip Cost & Carbon Calculator")
-    st.write("Estimate route fuel expenditure and carbon footprint for your trip across Jaipur.")
-    
     col_c1, col_c2 = st.columns([1, 1])
-    
     with col_c1:
-        calc_origin = st.selectbox("From", list(origin_coords.keys()), key="calc_orig")
+        calc_origin = st.selectbox("From", list(ORIGIN_COORDS.keys()), key="calc_orig")
         calc_dest = st.selectbox("To Destination", list(current_hubs.keys()), key="calc_dest")
-        
-        c_orig_lat, c_orig_lon = origin_coords[calc_origin]
+        c_orig_lat, c_orig_lon = ORIGIN_COORDS[calc_origin]
         c_target = current_hubs[calc_dest]
-        
         c_dest_lat = float(c_target.get("lat", 26.9124))
         c_dest_lon = float(c_target.get("lon", 75.7873))
-        
         _, trip_dist, trip_time = get_osrm_route(c_orig_lat, c_orig_lon, c_dest_lat, c_dest_lon)
-        
         est_cost, est_co2 = calculate_trip_impact(trip_dist, vehicle_mode)
-        
         st.metric("Total Distance", f"{trip_dist} km")
         st.metric("Estimated Drive Time", f"{trip_time} mins")
 
     with col_c2:
         st.markdown(f"### 📊 Environmental & Fuel Impact (`{vehicle_mode}`)")
-        
         m_col1, m_col2 = st.columns(2)
         m_col1.metric("Est. Fuel/Energy Cost", f"₹{est_cost}")
         m_col2.metric("Carbon Footprint", f"{est_co2} kg CO₂")
-        
         st.progress(min(1.0, est_co2 / 2.0), text=f"Carbon Intensity Rating for {trip_dist} km")
-        
         if vehicle_mode != "EV":
             ev_cost, _ = calculate_trip_impact(trip_dist, "EV")
-            savings = est_cost - ev_cost
-            st.success(f"💡 **EV Savings Tip:** Switching this trip to an Electric Vehicle saves approximately **₹{savings:.1f}** in fuel cost!")
+            st.success(f"💡 **EV Savings Tip:** Switching this trip to an EV saves **₹{est_cost - ev_cost:.1f}**!")
 
-# ------------------------------------------
 # TAB 5: CITY NETWORK ANALYTICS
-# ------------------------------------------
 with tab5:
     st.subheader("📊 City Network Health & Analytics")
-    
     total_capacity = sum(h.get("total_slots", 100) for h in current_hubs.values())
     total_occupied = sum(h.get("occupied", 0) for h in current_hubs.values())
     total_ev = sum(h.get("ev_slots", 0) for h in current_hubs.values())
     net_utilization = (total_occupied / total_capacity * 100) if total_capacity > 0 else 0
     
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-    col_m1.metric("Landmarks & Hubs Online", len(current_hubs))
-    col_m2.metric("Total Network Slots", f"{total_occupied} / {total_capacity}")
-    col_m3.metric("System Utilization", f"{net_utilization:.1f}%")
-    col_m4.metric("EV Ports Active", total_ev)
+    col_m1.metric("Landmarks Online", len(current_hubs))
+    col_m2.metric("Total Slots", f"{total_occupied} / {total_capacity}")
+    col_m3.metric("Utilization", f"{net_utilization:.1f}%")
+    col_m4.metric("EV Ports", total_ev)
     
     st.write("---")
     st.subheader("Live Hub & Landmark Breakdown")
-    
-    analytics_data = []
-    for h in current_hubs.values():
-        tot = h.get("total_slots", 100)
-        occ = h.get("occupied", 0)
-        util = (occ / tot * 100) if tot > 0 else 0
-        rate = h.get("hourly_rate", 30)
-        quality = h.get("road_quality", 7)
-        
-        analytics_data.append({
+    analytics_data = [
+        {
             "Landmark / Hub Name": h.get("name", "Hub"),
             "Category": h.get("category", "General"),
-            "Occupied": occ,
-            "Capacity": tot,
-            "Free Slots": tot - occ,
-            "Hourly Rate": f"₹{rate}/hr",
-            "Utilization": f"{util:.1f}%",
-            "Road Index": f"{quality}/10",
+            "Occupied": h.get("occupied", 0),
+            "Capacity": h.get("total_slots", 100),
+            "Free Slots": h.get("total_slots", 100) - h.get("occupied", 0),
+            "Hourly Rate": f"₹{h.get('hourly_rate', 30)}/hr",
+            "Utilization": f"{(h.get('occupied', 0) / h.get('total_slots', 100) * 100):.1f}%",
+            "Road Index": f"{h.get('road_quality', 7)}/10",
             "EV Ports": h.get("ev_slots", 0)
-        })
+        } for h in current_hubs.values()
+    ]
+    st.dataframe(pd.DataFrame(analytics_data), use_container_width=True)
     
-    analytics_df = pd.DataFrame(analytics_data)
-    st.dataframe(analytics_df, use_container_width=True)
