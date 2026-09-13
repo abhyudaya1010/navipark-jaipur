@@ -13,7 +13,7 @@ from sklearn.ensemble import RandomForestRegressor
 from supabase import create_client, Client
 
 # ==========================================
-# 1. STREAMLIT CONFIG & PWA MANIFEST
+# 1. STREAMLIT CONFIG & PWA MANIFEST / SW LOADER
 # ==========================================
 st.set_page_config(
     page_title="NaviPark 3D Pro - Smart Mobility & Landmarks",
@@ -56,6 +56,11 @@ js_code = f"""
     link.rel = 'manifest';
     link.href = manifestURL;
     parentDocument.head.appendChild(link);
+
+    // Register physical service worker if available
+    if ('serviceWorker' in navigator) {{
+        navigator.serviceWorker.register('./sw.js').catch(() => {{}});
+    }}
 </script>
 """
 components.html(js_code, height=0)
@@ -121,7 +126,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Global Constants / Shared State
 ORIGIN_COORDS = {
     "Jaipur International Airport (JAI)": [26.8242, 75.8122],
     "Jaipur Junction Railway Station": [26.9196, 75.7878],
@@ -133,20 +137,20 @@ ORIGIN_COORDS = {
 }
 
 DEFAULT_HUBS_DATA = [
-    {"name": "Gaurav Tower (GT) Hub", "category": "Commercial", "lat": 26.8528, "lon": 75.8052, "height": 250, "total_slots": 150, "occupied": 130, "road_quality": 8, "ev_slots": 12, "hourly_rate": 30},
-    {"name": "World Trade Park (WTP) Hub", "category": "Commercial", "lat": 26.8538, "lon": 75.8058, "height": 300, "total_slots": 300, "occupied": 240, "road_quality": 9, "ev_slots": 25, "hourly_rate": 40},
-    {"name": "Raja Park Commercial Hub", "category": "Commercial", "lat": 26.8917, "lon": 75.8239, "height": 200, "total_slots": 100, "occupied": 85, "road_quality": 6, "ev_slots": 8, "hourly_rate": 25},
-    {"name": "Jaipur Junction Station Hub", "category": "Transit", "lat": 26.9196, "lon": 75.7878, "height": 280, "total_slots": 250, "occupied": 210, "road_quality": 7, "ev_slots": 15, "hourly_rate": 20},
-    {"name": "MI Road Shopping District", "category": "Commercial", "lat": 26.9154, "lon": 75.8118, "height": 220, "total_slots": 120, "occupied": 105, "road_quality": 8, "ev_slots": 10, "hourly_rate": 30},
-    {"name": "MNIT Campus Smart Hub", "category": "Education", "lat": 26.8627, "lon": 75.8122, "height": 180, "total_slots": 80, "occupied": 42, "road_quality": 9, "ev_slots": 20, "hourly_rate": 15},
-    {"name": "Hawa Mahal (Palace of Winds)", "category": "Landmark", "lat": 26.9239, "lon": 75.8267, "height": 260, "total_slots": 90, "occupied": 78, "road_quality": 7, "ev_slots": 6, "hourly_rate": 35},
-    {"name": "City Palace Jaipur", "category": "Landmark", "lat": 26.9258, "lon": 75.8237, "height": 290, "total_slots": 120, "occupied": 95, "road_quality": 8, "ev_slots": 10, "hourly_rate": 35},
-    {"name": "Amer Fort (Amber)", "category": "Landmark", "lat": 26.9855, "lon": 75.8513, "height": 350, "total_slots": 200, "occupied": 160, "road_quality": 8, "ev_slots": 12, "hourly_rate": 50},
-    {"name": "Jal Mahal (Water Palace)", "category": "Landmark", "lat": 26.9534, "lon": 75.8462, "height": 240, "total_slots": 110, "occupied": 70, "road_quality": 8, "ev_slots": 8, "hourly_rate": 30},
-    {"name": "Albert Hall Museum", "category": "Landmark", "lat": 26.9116, "lon": 75.8195, "height": 270, "total_slots": 140, "occupied": 90, "road_quality": 9, "ev_slots": 14, "hourly_rate": 25},
-    {"name": "Nahargarh Fort", "category": "Landmark", "lat": 26.9372, "lon": 75.8155, "height": 320, "total_slots": 150, "occupied": 115, "road_quality": 6, "ev_slots": 5, "hourly_rate": 40},
-    {"name": "Jantar Mantar Observatory", "category": "Landmark", "lat": 26.9248, "lon": 75.8246, "height": 210, "total_slots": 85, "occupied": 60, "road_quality": 8, "ev_slots": 6, "hourly_rate": 30},
-    {"name": "Birla Mandir (Laxmi Narayan)", "category": "Landmark", "lat": 26.8924, "lon": 75.8156, "height": 230, "total_slots": 130, "occupied": 95, "road_quality": 9, "ev_slots": 10, "hourly_rate": 20}
+    {"id": "hub_gt", "name": "Gaurav Tower (GT) Hub", "category": "Commercial", "lat": 26.8528, "lon": 75.8052, "height": 250, "total_slots": 150, "occupied": 130, "road_quality": 8, "ev_slots": 12, "hourly_rate": 30},
+    {"id": "hub_wtp", "name": "World Trade Park (WTP) Hub", "category": "Commercial", "lat": 26.8538, "lon": 75.8058, "height": 300, "total_slots": 300, "occupied": 240, "road_quality": 9, "ev_slots": 25, "hourly_rate": 40},
+    {"id": "hub_rp", "name": "Raja Park Commercial Hub", "category": "Commercial", "lat": 26.8917, "lon": 75.8239, "height": 200, "total_slots": 100, "occupied": 85, "road_quality": 6, "ev_slots": 8, "hourly_rate": 25},
+    {"id": "hub_jj", "name": "Jaipur Junction Station Hub", "category": "Transit", "lat": 26.9196, "lon": 75.7878, "height": 280, "total_slots": 250, "occupied": 210, "road_quality": 7, "ev_slots": 15, "hourly_rate": 20},
+    {"id": "hub_mi", "name": "MI Road Shopping District", "category": "Commercial", "lat": 26.9154, "lon": 75.8118, "height": 220, "total_slots": 120, "occupied": 105, "road_quality": 8, "ev_slots": 10, "hourly_rate": 30},
+    {"id": "hub_mnit", "name": "MNIT Campus Smart Hub", "category": "Education", "lat": 26.8627, "lon": 75.8122, "height": 180, "total_slots": 80, "occupied": 42, "road_quality": 9, "ev_slots": 20, "hourly_rate": 15},
+    {"id": "hub_hm", "name": "Hawa Mahal (Palace of Winds)", "category": "Landmark", "lat": 26.9239, "lon": 75.8267, "height": 260, "total_slots": 90, "occupied": 78, "road_quality": 7, "ev_slots": 6, "hourly_rate": 35},
+    {"id": "hub_cp", "name": "City Palace Jaipur", "category": "Landmark", "lat": 26.9258, "lon": 75.8237, "height": 290, "total_slots": 120, "occupied": 95, "road_quality": 8, "ev_slots": 10, "hourly_rate": 35},
+    {"id": "hub_af", "name": "Amer Fort (Amber)", "category": "Landmark", "lat": 26.9855, "lon": 75.8513, "height": 350, "total_slots": 200, "occupied": 160, "road_quality": 8, "ev_slots": 12, "hourly_rate": 50},
+    {"id": "hub_jm", "name": "Jal Mahal (Water Palace)", "category": "Landmark", "lat": 26.9534, "lon": 75.8462, "height": 240, "total_slots": 110, "occupied": 70, "road_quality": 8, "ev_slots": 8, "hourly_rate": 30},
+    {"id": "hub_ah", "name": "Albert Hall Museum", "category": "Landmark", "lat": 26.9116, "lon": 75.8195, "height": 270, "total_slots": 140, "occupied": 90, "road_quality": 9, "ev_slots": 14, "hourly_rate": 25},
+    {"id": "hub_nh", "name": "Nahargarh Fort", "category": "Landmark", "lat": 26.9372, "lon": 75.8155, "height": 320, "total_slots": 150, "occupied": 115, "road_quality": 6, "ev_slots": 5, "hourly_rate": 40},
+    {"id": "hub_jant", "name": "Jantar Mantar Observatory", "category": "Landmark", "lat": 26.9248, "lon": 75.8246, "height": 210, "total_slots": 85, "occupied": 60, "road_quality": 8, "ev_slots": 6, "hourly_rate": 30},
+    {"id": "hub_bm", "name": "Birla Mandir (Laxmi Narayan)", "category": "Landmark", "lat": 26.8924, "lon": 75.8156, "height": 230, "total_slots": 130, "occupied": 95, "road_quality": 9, "ev_slots": 10, "hourly_rate": 20}
 ]
 
 # ==========================================
@@ -160,11 +164,7 @@ def init_supabase() -> Client:
         return create_client(url, key)
     return None
 
-supabase = None
-try:
-    supabase = init_supabase()
-except Exception:
-    pass
+supabase = init_supabase()
 
 if "hubs_data" not in st.session_state:
     st.session_state["hubs_data"] = {item["name"]: item.copy() for item in DEFAULT_HUBS_DATA}
@@ -174,7 +174,6 @@ if "user_passes" not in st.session_state:
 
 @st.cache_data(ttl=600)
 def fetch_real_jaipur_ev_stations():
-    """Fetches real-time EV charging POIs around Jaipur via OpenChargeMap API."""
     url = "https://api.openchargemap.io/v3/poi/"
     params = {
         "output": "json",
@@ -186,7 +185,10 @@ def fetch_real_jaipur_ev_stations():
         "compact": True,
         "verbose": False
     }
+    ocm_key = st.secrets.get("OPENCHARGEMAP_API_KEY", "")
     headers = {"User-Agent": "NaviParkPro-Jaipur/1.0"}
+    if ocm_key:
+        headers["X-API-Key"] = ocm_key
     try:
         r = requests.get(url, params=params, headers=headers, timeout=5)
         if r.status_code == 200:
@@ -202,6 +204,7 @@ def fetch_real_jaipur_ev_stations():
                 if lat and lon:
                     clean_name = f"EV Hub: {title}"[:35]
                     ev_nodes[clean_name] = {
+                        "id": f"ev_{item.get('ID', random.randint(1000,9999))}",
                         "name": clean_name,
                         "category": "EV Charging",
                         "lat": float(lat),
@@ -220,20 +223,16 @@ def fetch_real_jaipur_ev_stations():
 
 @st.cache_resource
 def train_occupancy_ml_model():
-    """Trains a Random Forest Regressor on Jaipur diurnal & categorical traffic curves."""
     np.random.seed(42)
     n_samples = 2500
     hours = np.random.randint(0, 24, n_samples)
     days = np.random.randint(0, 7, n_samples)
-    cat_code = np.random.choice([0, 1, 2, 3], size=n_samples) # 0:Commercial, 1:Landmark, 2:Transit, 3:Education/EV
+    cat_code = np.random.choice([0, 1, 2, 3], size=n_samples)
     rates = np.random.choice([15, 18, 20, 25, 30, 40, 50], size=n_samples)
-    
-    # Synthetic occupancy generator based on domain intuition
     base = 0.35 + 0.38 * np.exp(-((hours - 13)**2) / 20) + 0.28 * np.exp(-((hours - 19)**2) / 12)
     cat_bump = np.where(cat_code == 1, 0.12, np.where(cat_code == 3, -0.15, 0.05))
     noise = np.random.normal(0, 0.04, n_samples)
     y = np.clip(base + cat_bump + noise, 0.15, 0.96)
-    
     X = np.column_stack([hours, days, cat_code, rates])
     model = RandomForestRegressor(n_estimators=70, max_depth=12, random_state=42)
     model.fit(X, y)
@@ -272,18 +271,20 @@ def fetch_real_hubs():
 def create_pay_at_venue_reservation(hub_name, fee):
     pass_id = f"NPJ-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
     clean_target = hub_name.strip()
-    
     if clean_target in st.session_state["hubs_data"]:
         hub = st.session_state["hubs_data"][clean_target]
         tot = hub.get("total_slots", 100)
         occ = hub.get("occupied", 0)
         if occ < tot:
-            hub["occupied"] = occ + 1
-
+            new_occ = occ + 1
+            hub["occupied"] = new_occ
+            if supabase and "id" in hub:
+                try:
+                    supabase.table("hubs").update({"occupied": new_occ}).eq("id", hub["id"]).execute()
+                except Exception:
+                    pass
     pass_record = {
-        "pass_id": pass_id,
-        "hub": hub_name,
-        "fee": fee,
+        "pass_id": pass_id, "hub": hub_name, "fee": fee,
         "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "status": "CONFIRMED"
     }
@@ -311,14 +312,11 @@ def get_osrm_route(start_lat, start_lon, end_lat, end_lon):
 
 def calculate_trip_impact(dist_km, vehicle_type="Petrol Car"):
     if vehicle_type == "EV":
-        cost = dist_km * 1.5
-        co2_kg = 0.0
+        cost, co2_kg = dist_km * 1.5, 0.0
     elif vehicle_type == "Two Wheeler":
-        cost = dist_km * 2.5
-        co2_kg = dist_km * 0.04
+        cost, co2_kg = dist_km * 2.5, dist_km * 0.04
     else:
-        cost = dist_km * 7.5
-        co2_kg = dist_km * 0.12
+        cost, co2_kg = dist_km * 7.5, dist_km * 0.12
     return round(cost, 1), round(co2_kg, 2)
 
 current_hubs = fetch_real_hubs()
@@ -336,13 +334,11 @@ with st.sidebar:
     selected_cats = st.multiselect("Filter by Category", categories, default=categories)
     min_free_slots = st.slider("Min. Free Slots Required", 0, 50, 0)
     ev_only = st.checkbox("⚡ Show EV Charging Locations Only", value=False)
-    
     st.write("---")
     st.subheader("🚗 Trip Settings")
     vehicle_mode = st.selectbox("Vehicle Type", ["Petrol Car", "Diesel Car", "EV", "Two Wheeler"])
-    
     st.write("---")
-    st.caption("⚡ **Live Sensor Telemetry:** Auto-syncing parking occupancy every 10 seconds.")
+    st.caption("⚡ **Live Sensor Telemetry:** Multi-user Supabase sync active.")
 
 # ==========================================
 # 6. HEADER & AUTOMATED TELEMETRY FRAGMENT
@@ -356,8 +352,13 @@ def auto_sync_banner():
         delta = random.randint(-2, 2)
         tot = hub.get("total_slots", 100)
         occ = hub.get("occupied", 50)
-        hub["occupied"] = max(10, min(tot, occ + delta))
-
+        new_occ = max(10, min(tot, occ + delta))
+        hub["occupied"] = new_occ
+        if supabase and "id" in hub:
+            try:
+                supabase.table("hubs").update({"occupied": new_occ}).eq("id", hub["id"]).execute()
+            except Exception:
+                pass
     st.caption(
         f"⚡ **Live Network Telemetry:** Monitoring {len(current_hubs)} Jaipur locations & EV POIs | "
         f"Last Pulse: {datetime.datetime.now().strftime('%H:%M:%S IST')}"
@@ -531,13 +532,13 @@ with tab3:
                 * **Traffic Density:** Heavy slowdowns near Badi Chaupar between **11:00 AM - 6:00 PM**.
                 * **Shortest Path:** Drive via **MI Road -> Ajmeri Gate -> Tripolia Bazar**.
                 * **Smart Parking Strategy:** Park at **City Palace Hub** or **Albert Hall Hub** (take e-rickshaw).
-                * **EV Availability:** Albert Hall Hub has 14 fast-charging ports available.
+                * **EV Availability:** Albert Hall Hub has fast-charging ports available.
                 """)
             else:
                 st.markdown("""
                 **💡 Strategic AI Recommendation:**
                 * **Network Status:** Major corridors (JLN Marg, Tonk Road, MI Road) flowing normally.
-                * **EV Charging Tip:** Fast chargers active via OpenChargeMap POI feed (WTP, Albert Hall, Amer Fort, and LIVE nodes).
+                * **EV Charging Tip:** Fast chargers active via OpenChargeMap POI feed.
                 """)
 
 # TAB 4: ECO & TRIP COST CALCULATOR
@@ -621,7 +622,6 @@ with tab6:
         hub_rate = pred_hub.get("hourly_rate", 30)
         tot_cap = pred_hub.get("total_slots", 100)
         
-        # Inference using RF model
         X_infer = np.array([[target_hour, selected_day_code, hub_cat_code, hub_rate]])
         pred_util = ml_occupancy_model.predict(X_infer)[0]
         pred_occ_slots = int(round(pred_util * tot_cap))
@@ -652,6 +652,8 @@ with tab6:
             "Total Capacity": tot_cap
         })
         st.line_chart(chart_df, x="Hour", y=["Projected Occupied Slots", "Total Capacity"])
+        
+        
         
         
     
