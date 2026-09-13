@@ -25,7 +25,7 @@ st.set_page_config(
 pwa_manifest_json = json.dumps({
     "name": "NaviPark 3D Jaipur Pro",
     "short_name": "NaviPark Pro",
-    "description": "Smart Mobility, AI Route Engine, ML Predictor & Parking Network for Jaipur",
+    "description": "Smart Mobility, AI Route Engine, ML Predictor, Live EV Network & Parking for Jaipur",
     "start_url": "./",
     "display": "standalone",
     "background_color": "#070A12",
@@ -172,6 +172,52 @@ if "hubs_data" not in st.session_state:
 if "user_passes" not in st.session_state:
     st.session_state["user_passes"] = []
 
+@st.cache_data(ttl=600)
+def fetch_real_jaipur_ev_stations():
+    """Fetches real-time EV charging POIs around Jaipur via OpenChargeMap API."""
+    url = "https://api.openchargemap.io/v3/poi/"
+    params = {
+        "output": "json",
+        "latitude": 26.9124,
+        "longitude": 75.7873,
+        "distance": 25,
+        "distanceunit": "km",
+        "maxresults": 40,
+        "compact": True,
+        "verbose": False
+    }
+    headers = {"User-Agent": "NaviParkPro-Jaipur/1.0"}
+    try:
+        r = requests.get(url, params=params, headers=headers, timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            ev_nodes = {}
+            for item in data:
+                addr = item.get("AddressInfo", {})
+                title = addr.get("Title", "Public EV Station")
+                lat = addr.get("Latitude")
+                lon = addr.get("Longitude")
+                connections = item.get("Connections", [])
+                ev_count = len(connections) if connections else random.randint(2, 8)
+                if lat and lon:
+                    clean_name = f"EV Hub: {title}"[:35]
+                    ev_nodes[clean_name] = {
+                        "name": clean_name,
+                        "category": "EV Charging",
+                        "lat": float(lat),
+                        "lon": float(lon),
+                        "height": 190,
+                        "total_slots": max(10, ev_count * 3),
+                        "occupied": random.randint(2, max(3, ev_count * 2)),
+                        "road_quality": 8,
+                        "ev_slots": max(2, ev_count),
+                        "hourly_rate": 18
+                    }
+            return ev_nodes
+    except Exception:
+        pass
+    return {}
+
 @st.cache_resource
 def train_occupancy_ml_model():
     """Trains a Random Forest Regressor on Jaipur diurnal & categorical traffic curves."""
@@ -179,8 +225,8 @@ def train_occupancy_ml_model():
     n_samples = 2500
     hours = np.random.randint(0, 24, n_samples)
     days = np.random.randint(0, 7, n_samples)
-    cat_code = np.random.choice([0, 1, 2, 3], size=n_samples) # 0:Commercial, 1:Landmark, 2:Transit, 3:Education
-    rates = np.random.choice([15, 20, 25, 30, 40, 50], size=n_samples)
+    cat_code = np.random.choice([0, 1, 2, 3], size=n_samples) # 0:Commercial, 1:Landmark, 2:Transit, 3:Education/EV
+    rates = np.random.choice([15, 18, 20, 25, 30, 40, 50], size=n_samples)
     
     # Synthetic occupancy generator based on domain intuition
     base = 0.35 + 0.38 * np.exp(-((hours - 13)**2) / 20) + 0.28 * np.exp(-((hours - 19)**2) / 12)
@@ -196,7 +242,7 @@ def train_occupancy_ml_model():
 ml_occupancy_model = train_occupancy_ml_model()
 
 def cat_to_code(cat_str):
-    mapping = {"Commercial": 0, "Landmark": 1, "Transit": 2, "Education": 3}
+    mapping = {"Commercial": 0, "Landmark": 1, "Transit": 2, "Education": 3, "EV Charging": 3}
     return mapping.get(cat_str, 0)
 
 def fetch_real_hubs():
@@ -276,6 +322,9 @@ def calculate_trip_impact(dist_km, vehicle_type="Petrol Car"):
     return round(cost, 1), round(co2_kg, 2)
 
 current_hubs = fetch_real_hubs()
+live_ev_hubs = fetch_real_jaipur_ev_stations()
+if live_ev_hubs:
+    current_hubs.update(live_ev_hubs)
 
 # ==========================================
 # 5. SIDEBAR FILTERS & SETTINGS
@@ -299,7 +348,7 @@ with st.sidebar:
 # 6. HEADER & AUTOMATED TELEMETRY FRAGMENT
 # ==========================================
 st.markdown('<div class="main-title">NaviPark 3D Pro 🚘</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Smart Mobility, 3D Route Engine, ML Occupancy Predictor & Landmark Network</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Smart Mobility, 3D Route Engine, ML Occupancy Predictor, Live EV Network & Landmarks</div>', unsafe_allow_html=True)
 
 @st.fragment(run_every=10)
 def auto_sync_banner():
@@ -310,7 +359,7 @@ def auto_sync_banner():
         hub["occupied"] = max(10, min(tot, occ + delta))
 
     st.caption(
-        f"⚡ **Live Network Telemetry:** Monitoring {len(st.session_state['hubs_data'])} Jaipur landmarks & hubs | "
+        f"⚡ **Live Network Telemetry:** Monitoring {len(current_hubs)} Jaipur locations & EV POIs | "
         f"Last Pulse: {datetime.datetime.now().strftime('%H:%M:%S IST')}"
     )
 
@@ -367,7 +416,7 @@ with tab1:
     with col_control:
         st.subheader("Navigation Control")
         user_origin = st.selectbox("Starting Location", list(ORIGIN_COORDS.keys()))
-        dest_hub_name = st.selectbox("Select Destination / Landmark", list(current_hubs.keys()))
+        dest_hub_name = st.selectbox("Select Destination / Landmark / EV POI", list(current_hubs.keys()))
         target_hub = current_hubs[dest_hub_name]
         
         orig_lat, orig_lon = ORIGIN_COORDS[user_origin]
@@ -384,7 +433,7 @@ with tab1:
             st.write(f"1. **Start:** Depart from `{user_origin}`")
             st.write(f"2. **Merge:** Join main arterial road towards `{dest_cat}` corridor")
             st.write(f"3. **Arrive:** Destination `{target_hub.get('name', dest_hub_name)}` on right")
-            st.write(f"4. **Parking:** `{avail_slots}` slots available")
+            st.write(f"4. **Parking / EV Ports:** `{avail_slots}` slots | `{target_hub.get('ev_slots', 0)}` EV ports")
 
         st.write("---")
         st.caption("🟢 Green: High Availability | 🟠 Yellow: Moderate | 🔴 Red: Near Capacity")
@@ -488,7 +537,7 @@ with tab3:
                 st.markdown("""
                 **💡 Strategic AI Recommendation:**
                 * **Network Status:** Major corridors (JLN Marg, Tonk Road, MI Road) flowing normally.
-                * **EV Charging Tip:** Fast chargers active at WTP, Albert Hall, and Amer Fort Hubs.
+                * **EV Charging Tip:** Fast chargers active via OpenChargeMap POI feed (WTP, Albert Hall, Amer Fort, and LIVE nodes).
                 """)
 
 # TAB 4: ECO & TRIP COST CALCULATOR
@@ -497,7 +546,7 @@ with tab4:
     col_c1, col_c2 = st.columns([1, 1])
     with col_c1:
         calc_origin = st.selectbox("From", list(ORIGIN_COORDS.keys()), key="calc_orig")
-        calc_dest = st.selectbox("To Destination", list(current_hubs.keys()), key="calc_dest")
+        calc_dest = st.selectbox("To Destination / EV POI", list(current_hubs.keys()), key="calc_dest")
         c_orig_lat, c_orig_lon = ORIGIN_COORDS[calc_origin]
         c_target = current_hubs[calc_dest]
         c_dest_lat = float(c_target.get("lat", 26.9124))
@@ -526,7 +575,7 @@ with tab5:
     net_utilization = (total_occupied / total_capacity * 100) if total_capacity > 0 else 0
     
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-    col_m1.metric("Landmarks Online", len(current_hubs))
+    col_m1.metric("Locations / POIs Online", len(current_hubs))
     col_m2.metric("Total Slots", f"{total_occupied} / {total_capacity}")
     col_m3.metric("Utilization", f"{net_utilization:.1f}%")
     col_m4.metric("EV Ports", total_ev)
@@ -551,7 +600,7 @@ with tab5:
 # TAB 6: ML OCCUPANCY PREDICTOR
 with tab6:
     st.subheader("🔮 ML Occupancy & Demand Predictor (Random Forest Regressor)")
-    st.write("Predict future parking load across Jaipur hubs based on diurnal traffic curves, day of the week, and tariff tier.")
+    st.write("Predict future parking/charger load across Jaipur hubs based on diurnal traffic curves, day of the week, and tariff tier.")
     
     ml_col_left, ml_col_right = st.columns([1, 1.4])
     
@@ -588,7 +637,6 @@ with tab6:
 
     with ml_col_right:
         st.markdown(f"### 📈 24-Hour Diurnal Demand Forecast (`{pred_hub_name}`)")
-        # Generate 24hr forecast profile for selected day/hub
         hours_arr = np.arange(24)
         X_profile = np.column_stack([
             hours_arr,
@@ -604,5 +652,6 @@ with tab6:
             "Total Capacity": tot_cap
         })
         st.line_chart(chart_df, x="Hour", y=["Projected Occupied Slots", "Total Capacity"])
+        
         
     
