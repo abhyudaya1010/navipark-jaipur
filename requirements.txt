@@ -1,5 +1,8 @@
-fastapi
-uvicorn
-scikit-learn
-networkx
+streamlit
+pydeck
+qrcode[pil]
+requests
+pandas
 numpy
+scikit-learn
+supabase
