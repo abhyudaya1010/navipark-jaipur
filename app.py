@@ -8,6 +8,8 @@ import random
 import requests
 import pandas as pd
 import json
+import numpy as np
+from sklearn.ensemble import RandomForestRegressor
 from supabase import create_client, Client
 
 # ==========================================
@@ -23,7 +25,7 @@ st.set_page_config(
 pwa_manifest_json = json.dumps({
     "name": "NaviPark 3D Jaipur Pro",
     "short_name": "NaviPark Pro",
-    "description": "Smart Mobility, AI Route Engine & Parking Network for Jaipur",
+    "description": "Smart Mobility, AI Route Engine, ML Predictor & Parking Network for Jaipur",
     "start_url": "./",
     "display": "standalone",
     "background_color": "#070A12",
@@ -100,10 +102,11 @@ st.markdown("""
         border-right: 1px solid rgba(255, 255, 255, 0.1);
     }
     .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
+        gap: 6px;
         background-color: rgba(30, 41, 59, 0.5);
-        padding: 8px;
+        padding: 6px;
         border-radius: 14px;
+        flex-wrap: wrap;
     }
     .stTabs [data-baseweb="tab"] {
         border-radius: 10px;
@@ -147,7 +150,7 @@ DEFAULT_HUBS_DATA = [
 ]
 
 # ==========================================
-# 3. DATABASE & REAL-TIME TELEMETRY
+# 3. DATABASE, REAL-TIME TELEMETRY & ML MODEL
 # ==========================================
 @st.cache_resource
 def init_supabase() -> Client:
@@ -168,6 +171,33 @@ if "hubs_data" not in st.session_state:
 
 if "user_passes" not in st.session_state:
     st.session_state["user_passes"] = []
+
+@st.cache_resource
+def train_occupancy_ml_model():
+    """Trains a Random Forest Regressor on Jaipur diurnal & categorical traffic curves."""
+    np.random.seed(42)
+    n_samples = 2500
+    hours = np.random.randint(0, 24, n_samples)
+    days = np.random.randint(0, 7, n_samples)
+    cat_code = np.random.choice([0, 1, 2, 3], size=n_samples) # 0:Commercial, 1:Landmark, 2:Transit, 3:Education
+    rates = np.random.choice([15, 20, 25, 30, 40, 50], size=n_samples)
+    
+    # Synthetic occupancy generator based on domain intuition
+    base = 0.35 + 0.38 * np.exp(-((hours - 13)**2) / 20) + 0.28 * np.exp(-((hours - 19)**2) / 12)
+    cat_bump = np.where(cat_code == 1, 0.12, np.where(cat_code == 3, -0.15, 0.05))
+    noise = np.random.normal(0, 0.04, n_samples)
+    y = np.clip(base + cat_bump + noise, 0.15, 0.96)
+    
+    X = np.column_stack([hours, days, cat_code, rates])
+    model = RandomForestRegressor(n_estimators=70, max_depth=12, random_state=42)
+    model.fit(X, y)
+    return model
+
+ml_occupancy_model = train_occupancy_ml_model()
+
+def cat_to_code(cat_str):
+    mapping = {"Commercial": 0, "Landmark": 1, "Transit": 2, "Education": 3}
+    return mapping.get(cat_str, 0)
 
 def fetch_real_hubs():
     if supabase:
@@ -269,7 +299,7 @@ with st.sidebar:
 # 6. HEADER & AUTOMATED TELEMETRY FRAGMENT
 # ==========================================
 st.markdown('<div class="main-title">NaviPark 3D Pro 🚘</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Smart Mobility, 3D Route Engine & Real-Time Landmark Parking Network</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Smart Mobility, 3D Route Engine, ML Occupancy Predictor & Landmark Network</div>', unsafe_allow_html=True)
 
 @st.fragment(run_every=10)
 def auto_sync_banner():
@@ -287,14 +317,15 @@ def auto_sync_banner():
 auto_sync_banner()
 
 # ==========================================
-# 7. MAIN APPLICATION TABS
+# 7. MAIN APPLICATION TABS (6 TABS)
 # ==========================================
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🗺️ Interactive 3D Route Map",
     "🎟️ Digital Gate Pass & Wallet",
     "🤖 AI Mobility Strategist",
     "🌱 Eco & Trip Cost Calculator",
-    "📊 City Network Analytics"
+    "📊 City Network Analytics",
+    "🔮 ML Occupancy Predictor"
 ])
 
 # TAB 1: INTERACTIVE 3D ROUTE MAP
@@ -516,4 +547,62 @@ with tab5:
         } for h in current_hubs.values()
     ]
     st.dataframe(pd.DataFrame(analytics_data), use_container_width=True)
+
+# TAB 6: ML OCCUPANCY PREDICTOR
+with tab6:
+    st.subheader("🔮 ML Occupancy & Demand Predictor (Random Forest Regressor)")
+    st.write("Predict future parking load across Jaipur hubs based on diurnal traffic curves, day of the week, and tariff tier.")
+    
+    ml_col_left, ml_col_right = st.columns([1, 1.4])
+    
+    with ml_col_left:
+        pred_hub_name = st.selectbox("Select Target Hub for Prediction", list(current_hubs.keys()), key="ml_hub_sel")
+        pred_hub = current_hubs[pred_hub_name]
+        
+        day_mapping = {
+            "Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
+            "Friday": 4, "Saturday": 5, "Sunday": 6
+        }
+        selected_day_name = st.selectbox("Day of Week", list(day_mapping.keys()), index=datetime.datetime.now().weekday())
+        selected_day_code = day_mapping[selected_day_name]
+        
+        target_hour = st.slider("Target Hour of Day (0-23 IST)", 0, 23, (datetime.datetime.now().hour + 2) % 24)
+        
+        hub_cat_code = cat_to_code(pred_hub.get("category", "Commercial"))
+        hub_rate = pred_hub.get("hourly_rate", 30)
+        tot_cap = pred_hub.get("total_slots", 100)
+        
+        # Inference using RF model
+        X_infer = np.array([[target_hour, selected_day_code, hub_cat_code, hub_rate]])
+        pred_util = ml_occupancy_model.predict(X_infer)[0]
+        pred_occ_slots = int(round(pred_util * tot_cap))
+        pred_free_slots = max(0, tot_cap - pred_occ_slots)
+        
+        st.markdown("### 🎯 ML Inference Result")
+        sub_m1, sub_m2 = st.columns(2)
+        sub_m1.metric("Predicted Occupancy", f"{pred_util*100:.1f}%")
+        sub_m2.metric("Projected Free Slots", f"{pred_free_slots} / {tot_cap}")
+        
+        status_label = "🟢 High Availability" if pred_util < 0.60 else ("🟠 Moderate Load" if pred_util < 0.85 else "🔴 High Congestion Risk")
+        st.info(f"Model Assessment for **{target_hour:02d}:00 IST** on **{selected_day_name}**: {status_label}")
+
+    with ml_col_right:
+        st.markdown(f"### 📈 24-Hour Diurnal Demand Forecast (`{pred_hub_name}`)")
+        # Generate 24hr forecast profile for selected day/hub
+        hours_arr = np.arange(24)
+        X_profile = np.column_stack([
+            hours_arr,
+            np.full(24, selected_day_code),
+            np.full(24, hub_cat_code),
+            np.full(24, hub_rate)
+        ])
+        profile_preds = ml_occupancy_model.predict(X_profile) * tot_cap
+        
+        chart_df = pd.DataFrame({
+            "Hour": [f"{h:02d}:00" for h in hours_arr],
+            "Projected Occupied Slots": np.round(profile_preds, 1),
+            "Total Capacity": tot_cap
+        })
+        st.line_chart(chart_df, x="Hour", y=["Projected Occupied Slots", "Total Capacity"])
+        
     
