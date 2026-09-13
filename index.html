@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NaviPark - Jaipur Smart Mobility Platform</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#1e293b">
+    <style>
+        * { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #0f172a; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        header { height: 60px; background: #1e293b; padding: 0 1.5rem; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; }
+        h1 { margin: 0; font-size: 1.25rem; color: #38bdf8; }
+        .app-shell { display: flex; width: 100vw; height: calc(100vh - 60px); }
+        #map-container { flex: 2; height: 100%; background: #0b1120; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        svg { width: 100%; height: 100%; }
+        .hub-node { cursor: pointer; transition: r 0.2s, fill 0.2s; }
+        .hub-node:hover { r: 12; fill: #38bdf8 !important; }
+        .sidebar { flex: 1; min-width: 340px; max-width: 420px; height: 100%; background: #1e293b; border-left: 1px solid #334155; padding: 1.25rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; }
+        .card { background: #0f172a; border: 1px solid #334155; padding: 1rem; border-radius: 8px; }
+        .card h3 { margin-top: 0; color: #38bdf8; font-size: 1rem; }
+        .metric { display: flex; justify-content: space-between; margin: 0.5rem 0; font-size: 0.9rem; }
+        .badge { padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+        .normal { background: #166534; color: #bbf7d0; }
+        .congested { background: #991b1b; color: #fecaca; }
+        .map-label { fill: #94a3b8; font-size: 11px; font-weight: 500; pointer-events: none; }
+        select, button { width: 100%; padding: 0.5rem; background: #1e293b; color: #f8fafc; border: 1px solid #334155; border-radius: 4px; margin-top: 0.4rem; font-size: 0.85rem; }
+        button { background: #0284c7; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0369a1; }
+        label { font-size: 0.75rem; color: #94a3b8; }
+        .route-edge { stroke: #334155; stroke-width: 3; fill: none; transition: stroke 0.3s, stroke-width 0.3s; }
+        .route-active { stroke: #38bdf8 !important; stroke-width: 5 !important; filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.6)); }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>NaviPark <span>| Jaipur Mobility</span></h1>
+        <span style="font-size: 0.8rem; color: #94a3b8;">Random Forest + NetworkX + PWA</span>
+    </header>
+    <div class="app-shell">
+        <div id="map-container">
+            <svg viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice" id="jaipur-map">
+                <defs>
+                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.8"/>
+                    </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#grid)" />
+                
+                <!-- Corridor Edges -->
+                <line id="edge-WTP-GT" x1="480" y1="380" x2="510" y2="360" class="route-edge" />
+                <line id="edge-WTP-JLN" x1="480" y1="380" x2="430" y2="270" class="route-edge" />
+                <line id="edge-GT-Raja" x1="510" y1="360" x2="560" y2="290" class="route-edge" />
+                <line id="edge-Station-MI" x1="260" y1="320" x2="340" y2="350" class="route-edge" />
+                <line id="edge-MI-JLN" x1="340" y1="350" x2="430" y2="270" class="route-edge" />
+                <line id="edge-Raja-JLN" x1="560" y1="290" x2="430" y2="270" class="route-edge" />
+
+                <text x="410" y="120" fill="#475569" font-size="12">JLN Marg Corridor Axis</text>
+                <text x="160" y="340" fill="#475569" font-size="12">MI Road / Station Axis</text>
+                
+                <g class="hub-group" data-hub="World Trade Park (WTP)" data-cap="150" transform="translate(480, 380)">
+                    <circle class="hub-node" r="8" fill="#0284c7" />
+                    <text class="map-label" x="12" y="4">World Trade Park (WTP)</text>
+                </g>
+                <g class="hub-group" data-hub="Gaurav Tower (GT)" data-cap="100" transform="translate(510, 360)">
+                    <circle class="hub-node" r="8" fill="#0284c7" />
+                    <text class="map-label" x="12" y="4">Gaurav Tower (GT)</text>
+                </g>
+                <g class="hub-group" data-hub="Raja Park" data-cap="200" transform="translate(560, 290)">
+                    <circle class="hub-node" r="8" fill="#0284c7" />
+                    <text class="map-label" x="12" y="4">Raja Park</text>
+                </g>
+                <g class="hub-group" data-hub="Jaipur Railway Station" data-cap="250" transform="translate(260, 320)">
+                    <circle class="hub-node" r="8" fill="#0284c7" />
+                    <text class="map-label" x="-150" y="4">Jaipur Railway Station</text>
+                </g>
+                <g class="hub-group" data-hub="MI Road" data-cap="120" transform="translate(340, 350)">
+                    <circle class="hub-node" r="8" fill="#0284c7" />
+                    <text class="map-label" x="-60" y="20">MI Road</text>
+                </g>
+                <g class="hub-group" data-hub="JLN Marg Corridor" data-cap="180" transform="translate(430, 270)">
+                    <circle class="hub-node" r="8" fill="#0284c7" />
+                    <text class="map-label" x="12" y="4">JLN Marg Corridor</text>
+                </g>
+            </svg>
+        </div>
+        <div class="sidebar">
+            <h2 style="margin: 0; font-size: 1.1rem;">Hub Diagnostics</h2>
+            <button onclick="snapGpsNode()" style="background:#1e293b;border:1px dashed #38bdf8;color:#38bdf8;">?? Snap Nearest Jaipur Node (GPS)</button>
+            <div class="card" id="info-card">
+                <h3>Select a Hub</h3>
+                <p style="color: #94a3b8; font-size: 0.85rem;">Click any node on the SVG map.</p>
+            </div>
+            <div class="card">
+                <h3>Corridor Router (NetworkX)</h3>
+                <label>Origin</label>
+                <select id="route-origin">
+                    <option value="World Trade Park (WTP)">World Trade Park (WTP)</option>
+                    <option value="Jaipur Railway Station">Jaipur Railway Station</option>
+                    <option value="MI Road">MI Road</option>
+                </select>
+                <label style="margin-top:0.5rem;display:block;">Destination</label>
+                <select id="route-dest">
+                    <option value="Gaurav Tower (GT)">Gaurav Tower (GT)</option>
+                    <option value="Raja Park">Raja Park</option>
+                    <option value="JLN Marg Corridor">JLN Marg Corridor</option>
+                </select>
+                <button onclick="computeRoute()" style="margin-top:0.75rem;">Compute & Draw Shortest Path</button>
+                <div id="route-result" style="font-size: 0.8rem; margin-top: 0.5rem; color: #94a3b8;"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const nodeCoords = {
+            "World Trade Park (WTP)": { x: 480, y: 380, cap: 150 },
+            "Gaurav Tower (GT)": { x: 510, y: 360, cap: 100 },
+            "Raja Park": { x: 560, y: 290, cap: 200 },
+            "Jaipur Railway Station": { x: 260, y: 320, cap: 250 },
+            "MI Road": { x: 340, y: 350, cap: 120 },
+            "JLN Marg Corridor": { x: 430, y: 270, cap: 180 }
+        };
+
+        const edgeMap = {
+            "World Trade Park (WTP)-Gaurav Tower (GT)": "edge-WTP-GT",
+            "World Trade Park (WTP)-JLN Marg Corridor": "edge-WTP-JLN",
+            "Gaurav Tower (GT)-Raja Park": "edge-GT-Raja",
+            "Jaipur Railway Station-MI Road": "edge-Station-MI",
+            "MI Road-JLN Marg Corridor": "edge-MI-JLN",
+            "Raja Park-JLN Marg Corridor": "edge-Raja-JLN"
+        };
+
+        async function queryHubMetrics(hubName, capacity) {
+            const now = new Date();
+            const currentHour = now.getHours();
+            const currentDay = now.getDay();
+            const card = document.getElementById('info-card');
+            card.innerHTML = `<h3>${hubName}</h3><p style="color: #38bdf8;">Querying ML backend...</p>`;
+
+            try {
+                const response = await fetch(`/predict-hub?hub_name=${encodeURIComponent(hubName)}&total_capacity=${capacity}&hour=${currentHour}&day_of_week=${currentDay}`);
+                const data = await response.json();
+                
+                const statusText = data.network_status || "Normal";
+                const badgeClass = statusText.toLowerCase().includes("congested") ? "congested" : "normal";
+                const occPct = data.parking?.predicted_occupancy_pct ?? 50;
+                const freeSlots = data.parking?.estimated_free_slots ?? Math.round(capacity * (1 - occPct/100));
+                const trafficScore = data.traffic_density_score ?? 40;
+                const evUtil = data.ev_charging_utilization_pct ?? 30;
+
+                card.innerHTML = `
+                    <h3>${hubName}</h3>
+                    <div class="metric"><span>Status:</span> <span class="badge ${badgeClass}">${statusText}</span></div>
+                    <hr style="border-color: #334155; margin: 0.5rem 0;">
+                    <div class="metric"><span>Occupancy:</span> <strong>${occPct}%</strong></div>
+                    <div class="metric"><span>Free Slots:</span> <strong>${freeSlots} / ${capacity}</strong></div>
+                    <div class="metric"><span>Traffic Score:</span> <strong>${trafficScore}/100</strong></div>
+                    <div class="metric"><span>EV Charger:</span> <strong>${evUtil}%</strong></div>
+                `;
+            } catch (err) {
+                card.innerHTML = `<h3>${hubName}</h3><p style="color: #ef4444;">Server error.</p>`;
+            }
+        }
+
+        document.querySelectorAll('.hub-group').forEach(group => {
+            group.addEventListener('click', () => {
+                const hubName = group.getAttribute('data-hub');
+                const capacity = parseInt(group.getAttribute('data-cap'), 10);
+                queryHubMetrics(hubName, capacity);
+            });
+        });
+
+        async function computeRoute() {
+            const origin = document.getElementById('route-origin').value;
+            const dest = document.getElementById('route-dest').value;
+            const resEl = document.getElementById('route-result');
+            resEl.innerHTML = "Calculating corridor...";
+
+            // Reset active route lines
+            document.querySelectorAll('.route-edge').forEach(el => el.classList.remove('route-active'));
+
+            try {
+                const res = await fetch(`/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}`);
+                const data = await res.json();
+                if (data.error) {
+                    resEl.innerHTML = `<span style="color:#ef4444;">${data.error}</span>`;
+                } else {
+                    resEl.innerHTML = `<strong style="color:#38bdf8;">Est. Time: ${data.estimated_travel_min} min</strong><br>Path: ${data.path.join(' ? ')}`;
+                    
+                    // Highlight edges on SVG
+                    for (let i = 0; i < data.path.length - 1; i++) {
+                        const u = data.path[i];
+                        const v = data.path[i+1];
+                        const edgeIdDir = edgeMap[`${u}-${v}`];
+                        const edgeIdRev = edgeMap[`${v}-${u}`];
+                        const targetId = edgeIdDir || edgeIdRev;
+                        if (targetId) {
+                            document.getElementById(targetId)?.classList.add('route-active');
+                        }
+                    }
+                }
+            } catch (err) {
+                resEl.innerHTML = `<span style="color:#ef4444;">Failed to route.</span>`;
+            }
+        }
+
+        function snapGpsNode() {
+            if (!navigator.geolocation) {
+                alert("Geolocation not supported");
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(pos => {
+                // Approximate fallback mock snap to JLN Marg or WTP based on dummy proximity index
+                const nearest = "World Trade Park (WTP)";
+                queryHubMetrics(nearest, nodeCoords[nearest].cap);
+            }, () => {
+                // Graceful fallback to WTP on GPS denied
+                queryHubMetrics("World Trade Park (WTP)", 150);
+            });
+        }
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
+        }
+    </script>
+</body>
+</html>
