@@ -342,6 +342,20 @@ def build_traffic_colored_segments(coords, dist_km, duration_min):
         })
     return segments
 
+def get_coords_at_progress(route_path, progress_pct):
+    if not route_path:
+        return 26.9124, 75.7873
+    n = len(route_path)
+    if n == 1:
+        return route_path[0][1], route_path[0][0]
+    target_idx = (progress_pct / 100.0) * (n - 1)
+    idx_low = int(np.floor(target_idx))
+    idx_high = min(n - 1, idx_low + 1)
+    alpha = target_idx - idx_low
+    lon = route_path[idx_low][0] * (1 - alpha) + route_path[idx_high][0] * alpha
+    lat = route_path[idx_low][1] * (1 - alpha) + route_path[idx_high][1] * alpha
+    return lat, lon
+
 def haversine_dist(lat1, lon1, lat2, lon2):
     R = 6371.0
     dlat = np.radians(lat2 - lat1)
@@ -436,7 +450,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🏛️ Heritage TSP Tour Solver"
 ])
 
-# TAB 1: INTERACTIVE 3D ROUTE MAP
+# TAB 1: INTERACTIVE 3D ROUTE MAP & LIVE TELEMETRY
 with tab1:
     col_map, col_control = st.columns([3, 1])
     map_data = []
@@ -485,8 +499,19 @@ with tab1:
         traffic_segs = build_traffic_colored_segments(route_path, dist_km, duration_min)
         df_traffic_path = pd.DataFrame(traffic_segs)
         
-        st.metric("Shortest Driving Distance", f"{dist_km} km")
-        st.metric("Est. Travel Time", f"{duration_min} mins")
+        st.write("---")
+        st.subheader("📡 Live Journey Telemetry")
+        journey_progress = st.slider("Route Progress (%)", 0, 100, 35)
+        
+        covered_km = round(dist_km * (journey_progress / 100.0), 2)
+        remaining_km = round(dist_km - covered_km, 2)
+        rem_duration_min = round(duration_min * (1.0 - journey_progress / 100.0), 1)
+        curr_vehicle_lat, curr_vehicle_lon = get_coords_at_progress(route_path, journey_progress)
+        
+        mc1, mc2 = st.columns(2)
+        mc1.metric("Distance Covered", f"{covered_km} km")
+        mc2.metric("Remaining", f"{remaining_km} km")
+        st.metric("Live ETA to Arrival", f"{rem_duration_min} mins")
         
         with st.expander("🚘 Turn-by-Turn Route Steps"):
             dest_cat = target_hub.get("category", "Landmark")
@@ -497,7 +522,7 @@ with tab1:
             st.write(f"4. **Parking / EV Ports:** `{avail_slots}` slots | `{target_hub.get('ev_slots', 0)}` EV ports")
 
         st.write("---")
-        st.caption("🟢 Green: High Availability | 🟠 Yellow: Moderate | 🔴 Red: Near Capacity")
+        st.caption("🟢 Green: Free-Flow | 🟠 Yellow: Moderate | 🔴 Red: Congested")
 
     with col_map:
         if not df_map.empty:
@@ -521,12 +546,25 @@ with tab1:
                 width_max_pixels=10,
                 pickable=True
             )
+            vehicle_layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=[{"lat": curr_vehicle_lat, "lon": curr_vehicle_lon, "progress": journey_progress}],
+                get_position=["lon", "lat"],
+                get_color=[56, 189, 248, 255],
+                get_radius=280,
+                pickable=True,
+                stroked=True,
+                filled=True,
+                get_line_color=[255, 255, 255, 255],
+                line_width_min_pixels=3
+            )
+            
             mid_lat = (orig_lat + dest_lat) / 2
             mid_lon = (orig_lon + dest_lon) / 2
-            view_state = pdk.ViewState(latitude=mid_lat, longitude=mid_lon, zoom=11, pitch=50, bearing=10)
+            view_state = pdk.ViewState(latitude=mid_lat, longitude=mid_lon, zoom=12, pitch=50, bearing=10)
             
             st.pydeck_chart(pdk.Deck(
-                layers=[column_layer, path_layer],
+                layers=[column_layer, path_layer, vehicle_layer],
                 initial_view_state=view_state,
                 tooltip={"html": "<b>Segment Traffic: {status}</b><br/>Est. Speed: <b>{speed_kmh} km/h</b>"}
             ))
