@@ -338,7 +338,8 @@ def build_traffic_colored_segments(coords, dist_km, duration_min):
             "path": sub_path,
             "color": color,
             "status": status,
-            "speed_kmh": round(effective_speed, 1)
+            "speed_kmh": round(effective_speed, 1),
+            "name": f"Traffic Corridor ({status})"
         })
     return segments
 
@@ -548,7 +549,7 @@ with tab1:
             )
             vehicle_layer = pdk.Layer(
                 "ScatterplotLayer",
-                data=[{"lat": curr_vehicle_lat, "lon": curr_vehicle_lon, "progress": journey_progress}],
+                data=[{"lat": curr_vehicle_lat, "lon": curr_vehicle_lon, "progress": journey_progress, "name": "Active Vehicle"}],
                 get_position=["lon", "lat"],
                 get_color=[56, 189, 248, 255],
                 get_radius=280,
@@ -563,10 +564,23 @@ with tab1:
             mid_lon = (orig_lon + dest_lon) / 2
             view_state = pdk.ViewState(latitude=mid_lat, longitude=mid_lon, zoom=12, pitch=50, bearing=10)
             
+            tooltip_config = {
+                "html": """
+                    <div style='background:rgba(15,23,42,0.9); padding:8px 12px; border-radius:8px; color:#F8FAFC; font-family:sans-serif;'>
+                        <b>{name}</b><br/>
+                        Category: {category}<br/>
+                        Free Slots: {available} / {total_slots}<br/>
+                        EV Ports: {ev_slots}<br/>
+                        Traffic: {status} {speed_kmh}
+                    </div>
+                """,
+                "style": {"background": "transparent", "border": "none", "box-shadow": "none"}
+            }
+
             st.pydeck_chart(pdk.Deck(
-                layers=[column_layer, path_layer, vehicle_layer],
+                layers=[path_layer, column_layer, vehicle_layer],
                 initial_view_state=view_state,
-                tooltip={"html": "<b>Segment Traffic: {status}</b><br/>Est. Speed: <b>{speed_kmh} km/h</b>"}
+                tooltip=tooltip_config
             ))
         else:
             st.warning("No landmarks match your active filter criteria!")
@@ -833,6 +847,7 @@ with tab7:
             ))
         else:
             st.info("Select 2+ heritage locations on the left and click **Solve TSP Optimal Route**.")
+            
             
             
             
