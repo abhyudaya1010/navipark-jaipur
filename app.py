@@ -509,9 +509,9 @@ with tab1:
         curr_vehicle_lat, curr_vehicle_lon = get_coords_at_progress(route_path, journey_progress)
         
         mc1, mc2 = st.columns(2)
-        mc1.metric("Distance Covered", f"{covered_km} km")
-        mc2.metric("Remaining", f"{remaining_km} km")
-        st.metric("Live ETA to Arrival", f"{rem_duration_min} mins")
+        mc1.metric("Distance Covered", f"{covered_km:.2f} km")
+        mc2.metric("Remaining", f"{remaining_km:.2f} km")
+        st.metric("Live ETA to Arrival", f"{rem_duration_min:.1f} mins")
         
         with st.expander("🚘 Turn-by-Turn Route Steps"):
             dest_cat = target_hub.get("category", "Landmark")
@@ -833,6 +833,7 @@ with tab7:
             ))
         else:
             st.info("Select 2+ heritage locations on the left and click **Solve TSP Optimal Route**.")
+            
             
         
         
