@@ -290,9 +290,8 @@ def create_pay_at_venue_reservation(hub_name, fee):
     }
     st.session_state["user_passes"].append(pass_record)
     return pass_id
-
 # ==========================================
-# 4. ROUTE ENGINE & HERITAGE TSP SOLVER
+# 4. ROUTE ENGINE, TRAFFIC SEGMENTS & HERITAGE TSP SOLVER
 # ==========================================
 def get_osrm_route_with_steps(start_lat, start_lon, end_lat, end_lon):
     url = f"http://router.project-osrm.org/route/v1/driving/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson&steps=true"
@@ -315,14 +314,13 @@ def get_osrm_route_with_steps(start_lat, start_lon, end_lat, end_lon):
 def build_traffic_colored_segments(coords, dist_km, duration_min):
     """
     Splits route polyline coordinates into micro-segments and assigns traffic colors
-    based on overall speed ratio + time-of-day Jaipur corridor heuristics.
+    (Google Maps style: Green > 30 km/h, Amber 15-30 km/h, Red < 15 km/h).
     """
     if len(coords) < 2:
         return []
     
     avg_speed_kmh = (dist_km / (duration_min / 60.0)) if duration_min > 0 else 25.0
     now_hour = datetime.datetime.now().hour
-    # Peak hour penalty for old city / arterial corridors
     is_peak = (11 <= now_hour <= 14) or (18 <= now_hour <= 21)
     
     segments = []
@@ -335,18 +333,17 @@ def build_traffic_colored_segments(coords, dist_km, duration_min):
         if len(sub_path) < 2:
             continue
             
-        # Simulate segment-level variation weighted by peak hours
         jitter_factor = random.uniform(0.7, 1.3)
         effective_speed = avg_speed_kmh * jitter_factor * (0.75 if is_peak else 1.05)
         
         if effective_speed > 30.0:
-            color = [16, 185, 129, 255]    # Green
+            color = [16, 185, 129, 255]    # Green (Free-flow)
             status = "Free Flow"
         elif effective_speed >= 15.0:
-            color = [245, 158, 11, 255]   # Amber/Yellow
+            color = [245, 158, 11, 255]   # Amber (Moderate)
             status = "Moderate Traffic"
         else:
-            color = [239, 68, 68, 255]    # Red / Congested
+            color = [239, 68, 68, 255]    # Red (Heavy Congestion)
             status = "Heavy Congestion"
             
         segments.append({
@@ -356,6 +353,32 @@ def build_traffic_colored_segments(coords, dist_km, duration_min):
             "speed_kmh": round(effective_speed, 1)
         })
     return segments
+
+def haversine_dist(lat1, lon1, lat2, lon2):
+    R = 6371.0
+    dlat = np.radians(lat2 - lat1)
+    dlon = np.radians(lon2 - lon1)
+    a = np.sin(dlat / 2)**2 + np.cos(np.radians(lat1)) * np.cos(np.radians(lat2)) * np.sin(dlon / 2)**2
+    return 2 * R * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+
+def solve_heritage_tsp(stops_coords, start_key):
+    names = list(stops_coords.keys())
+    if start_key in names:
+        names.remove(start_key)
+    best_path = None
+    min_dist = float('inf')
+    for perm in itertools.permutations(names):
+        curr_path = [start_key] + list(perm)
+        d = 0.0
+        for i in range(len(curr_path) - 1):
+            p1 = stops_coords[curr_path[i]]
+            p2 = stops_coords[curr_path[i+1]]
+            d += haversine_dist(p1[0], p1[1], p2[0], p2[1])
+        if d < min_dist:
+            min_dist = d
+            best_path = curr_path
+    return best_path, round(min_dist, 2)
+
 def calculate_trip_impact(dist_km, vehicle_type="Petrol Car"):
     if vehicle_type == "EV":
         cost, co2_kg = dist_km * 1.5, 0.0
@@ -364,11 +387,6 @@ def calculate_trip_impact(dist_km, vehicle_type="Petrol Car"):
     else:
         cost, co2_kg = dist_km * 7.5, dist_km * 0.12
     return round(cost, 1), round(co2_kg, 2)
-
-current_hubs = fetch_real_hubs()
-live_ev_hubs = fetch_real_jaipur_ev_stations()
-if live_ev_hubs:
-    current_hubs.update(live_ev_hubs)
 
 # ==========================================
 # 5. SIDEBAR FILTERS & SETTINGS
