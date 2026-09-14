@@ -9,6 +9,7 @@ import requests
 import pandas as pd
 import json
 import numpy as np
+import itertools
 from sklearn.ensemble import RandomForestRegressor
 from supabase import create_client, Client
 
@@ -16,7 +17,7 @@ from supabase import create_client, Client
 # 1. STREAMLIT CONFIG & PWA MANIFEST / SW LOADER
 # ==========================================
 st.set_page_config(
-    page_title="NaviPark 3D Pro - Smart Mobility & Landmarks",
+    page_title="NaviPark 3D Pro - Smart Mobility & Heritage TSP",
     page_icon="🚘",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -25,7 +26,7 @@ st.set_page_config(
 pwa_manifest_json = json.dumps({
     "name": "NaviPark 3D Jaipur Pro",
     "short_name": "NaviPark Pro",
-    "description": "Smart Mobility, AI Route Engine, ML Predictor, Live EV Network & Parking for Jaipur",
+    "description": "Smart Mobility, AI Route Engine, ML Predictor, Live EV Network & Heritage TSP for Jaipur",
     "start_url": "./",
     "display": "standalone",
     "background_color": "#070A12",
@@ -57,7 +58,6 @@ js_code = f"""
     link.href = manifestURL;
     parentDocument.head.appendChild(link);
 
-    // Register physical service worker if available
     if ('serviceWorker' in navigator) {{
         navigator.serviceWorker.register('./sw.js').catch(() => {{}});
     }}
@@ -292,7 +292,7 @@ def create_pay_at_venue_reservation(hub_name, fee):
     return pass_id
 
 # ==========================================
-# 4. ROUTE ENGINE & ECO CALCULATOR
+# 4. ROUTE ENGINE & HERITAGE TSP SOLVER
 # ==========================================
 def get_osrm_route(start_lat, start_lon, end_lat, end_lon):
     url = f"http://router.project-osrm.org/route/v1/driving/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson"
@@ -309,6 +309,31 @@ def get_osrm_route(start_lat, start_lon, end_lat, end_lon):
     except Exception:
         pass
     return [[start_lon, start_lat], [end_lon, end_lat]], 5.0, 12.0
+
+def haversine_dist(lat1, lon1, lat2, lon2):
+    R = 6371.0
+    dlat = np.radians(lat2 - lat1)
+    dlon = np.radians(lon2 - lon1)
+    a = np.sin(dlat / 2)**2 + np.cos(np.radians(lat1)) * np.cos(np.radians(lat2)) * np.sin(dlon / 2)**2
+    return 2 * R * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+
+def solve_heritage_tsp(stops_coords, start_key):
+    names = list(stops_coords.keys())
+    if start_key in names:
+        names.remove(start_key)
+    best_path = None
+    min_dist = float('inf')
+    for perm in itertools.permutations(names):
+        curr_path = [start_key] + list(perm)
+        d = 0.0
+        for i in range(len(curr_path) - 1):
+            p1 = stops_coords[curr_path[i]]
+            p2 = stops_coords[curr_path[i+1]]
+            d += haversine_dist(p1[0], p1[1], p2[0], p2[1])
+        if d < min_dist:
+            min_dist = d
+            best_path = curr_path
+    return best_path, round(min_dist, 2)
 
 def calculate_trip_impact(dist_km, vehicle_type="Petrol Car"):
     if vehicle_type == "EV":
@@ -344,7 +369,7 @@ with st.sidebar:
 # 6. HEADER & AUTOMATED TELEMETRY FRAGMENT
 # ==========================================
 st.markdown('<div class="main-title">NaviPark 3D Pro 🚘</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Smart Mobility, 3D Route Engine, ML Occupancy Predictor, Live EV Network & Landmarks</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Smart Mobility, 3D Route Engine, ML Occupancy Predictor, Live EV Network & Heritage TSP Solver</div>', unsafe_allow_html=True)
 
 @st.fragment(run_every=10)
 def auto_sync_banner():
@@ -367,15 +392,16 @@ def auto_sync_banner():
 auto_sync_banner()
 
 # ==========================================
-# 7. MAIN APPLICATION TABS (6 TABS)
+# 7. MAIN APPLICATION TABS (7 TABS)
 # ==========================================
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🗺️ Interactive 3D Route Map",
     "🎟️ Digital Gate Pass & Wallet",
     "🤖 AI Mobility Strategist",
     "🌱 Eco & Trip Cost Calculator",
     "📊 City Network Analytics",
-    "🔮 ML Occupancy Predictor"
+    "🔮 ML Occupancy Predictor",
+    "🏛️ Heritage TSP Tour Solver"
 ])
 
 # TAB 1: INTERACTIVE 3D ROUTE MAP
@@ -652,6 +678,92 @@ with tab6:
             "Total Capacity": tot_cap
         })
         st.line_chart(chart_df, x="Hour", y=["Projected Occupied Slots", "Total Capacity"])
+
+# TAB 7: HERITAGE TSP TOUR SOLVER
+with tab7:
+    st.subheader("🏛️ Heritage TSP Multi-Stop Tour Solver")
+    st.write("Finds the globally optimal visiting sequence for Jaipur heritage circuits, minimizing total point-to-point distance.")
+    
+    default_heritage = [
+        "Amer Fort (Amber)",
+        "Jal Mahal (Water Palace)",
+        "Hawa Mahal (Palace of Winds)",
+        "City Palace Jaipur",
+        "Albert Hall Museum"
+    ]
+    
+    col_tsp_left, col_tsp_right = st.columns([1, 1.4])
+    
+    with col_tsp_left:
+        tsp_stops = st.multiselect(
+            "Select Heritage Stops to Tour",
+            list(current_hubs.keys()),
+            default=[s for s in default_heritage if s in current_hubs]
+        )
+        tsp_start = st.selectbox("Tour Start Hub / Gate", tsp_stops if tsp_stops else list(current_hubs.keys()))
+        
+        if st.button("Solve TSP Optimal Route", type="primary") and len(tsp_stops) >= 2:
+            sub_coords = {name: [current_hubs[name]["lat"], current_hubs[name]["lon"]] for name in tsp_stops}
+            best_sequence, total_dist = solve_heritage_tsp(sub_coords, tsp_start)
+            st.session_state["tsp_solution"] = {
+                "sequence": best_sequence,
+                "dist": total_dist,
+                "coords": sub_coords
+            }
+            st.success(f"Optimized Sequence Found! Total Haversine Span: **{total_dist} km**")
+
+        if "tsp_solution" in st.session_state:
+            seq = st.session_state["tsp_solution"]["sequence"]
+            st.markdown("### 🗺️ Optimal Visit Order")
+            for idx, stop_name in enumerate(seq, 1):
+                st.write(f"**{idx}.** `{stop_name}`")
+
+    with col_tsp_right:
+        if "tsp_solution" in st.session_state:
+            sol = st.session_state["tsp_solution"]
+            seq = sol["sequence"]
+            coords_map = sol["coords"]
+            
+            # Build polyline for sequence
+            path_pts = [[coords_map[name][1], coords_map[name][0]] for name in seq]
+            tsp_line_df = pd.DataFrame([{"path": path_pts}])
+            
+            # Scatter/Column overlay for stops
+            scatter_pts = [{
+                "name": name,
+                "lat": coords_map[name][0],
+                "lon": coords_map[name][1],
+                "order_idx": seq.index(name) + 1
+            } for name in seq]
+            df_scatter = pd.DataFrame(scatter_pts)
+            
+            line_layer = pdk.Layer(
+                "PathLayer",
+                data=tsp_line_df,
+                get_path="path",
+                get_color=[192, 132, 252, 255],
+                width_min_pixels=5
+            )
+            
+            scatter_layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=df_scatter,
+                get_position=["lon", "lat"],
+                get_color=[56, 189, 248, 255],
+                get_radius=220,
+                pickable=True
+            )
+            
+            first_coords = coords_map[seq[0]]
+            view_state_tsp = pdk.ViewState(latitude=first_coords[0], longitude=first_coords[1], zoom=12, pitch=30)
+            st.pydeck_chart(pdk.Deck(
+                layers=[line_layer, scatter_layer],
+                initial_view_state=view_state_tsp,
+                tooltip={"html": "<b>Stop #{order_idx}</b><br/>{name}"}
+            ))
+        else:
+            st.info("Select 2+ heritage locations on the left and click **Solve TSP Optimal Route**.")
+            
         
         
         
