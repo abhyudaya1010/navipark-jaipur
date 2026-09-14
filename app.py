@@ -290,6 +290,7 @@ def create_pay_at_venue_reservation(hub_name, fee):
     }
     st.session_state["user_passes"].append(pass_record)
     return pass_id
+
 # ==========================================
 # 4. ROUTE ENGINE, TRAFFIC SEGMENTS & HERITAGE TSP SOLVER
 # ==========================================
@@ -312,40 +313,27 @@ def get_osrm_route_with_steps(start_lat, start_lon, end_lat, end_lon):
     return [[start_lon, start_lat], [end_lon, end_lat]], 5.0, 12.0, []
 
 def build_traffic_colored_segments(coords, dist_km, duration_min):
-    """
-    Splits route polyline coordinates into micro-segments and assigns traffic colors
-    (Google Maps style: Green > 30 km/h, Amber 15-30 km/h, Red < 15 km/h).
-    """
     if len(coords) < 2:
         return []
-    
     avg_speed_kmh = (dist_km / (duration_min / 60.0)) if duration_min > 0 else 25.0
     now_hour = datetime.datetime.now().hour
     is_peak = (11 <= now_hour <= 14) or (18 <= now_hour <= 21)
-    
     segments = []
     n = len(coords)
     chunk_size = max(1, n // 8)
-    
     for i in range(0, n - 1, chunk_size):
         end_idx = min(n, i + chunk_size + 1)
         sub_path = coords[i:end_idx]
         if len(sub_path) < 2:
             continue
-            
         jitter_factor = random.uniform(0.7, 1.3)
         effective_speed = avg_speed_kmh * jitter_factor * (0.75 if is_peak else 1.05)
-        
         if effective_speed > 30.0:
-            color = [16, 185, 129, 255]    # Green (Free-flow)
-            status = "Free Flow"
+            color, status = [16, 185, 129, 255], "Free Flow"
         elif effective_speed >= 15.0:
-            color = [245, 158, 11, 255]   # Amber (Moderate)
-            status = "Moderate Traffic"
+            color, status = [245, 158, 11, 255], "Moderate Traffic"
         else:
-            color = [239, 68, 68, 255]    # Red (Heavy Congestion)
-            status = "Heavy Congestion"
-            
+            color, status = [239, 68, 68, 255], "Heavy Congestion"
         segments.append({
             "path": sub_path,
             "color": color,
@@ -388,14 +376,18 @@ def calculate_trip_impact(dist_km, vehicle_type="Petrol Car"):
         cost, co2_kg = dist_km * 7.5, dist_km * 0.12
     return round(cost, 1), round(co2_kg, 2)
 
+current_hubs = fetch_real_hubs()
+live_ev_hubs = fetch_real_jaipur_ev_stations()
+if live_ev_hubs:
+    current_hubs.update(live_ev_hubs)
+
 # ==========================================
 # 5. SIDEBAR FILTERS & SETTINGS
 # ==========================================
 with st.sidebar:
     st.title("⚙️ Map & Network Controls")
     st.subheader("🔍 Live Map Filters")
-    current_hubs = locals().get("current_hubs", {})
-categories = sorted(list(set(h.get("category", "General") for h in current_hubs.values())))
+    categories = sorted(list(set(h.get("category", "General") for h in current_hubs.values())))
     selected_cats = st.multiselect("Filter by Category", categories, default=categories)
     min_free_slots = st.slider("Min. Free Slots Required", 0, 50, 0)
     ev_only = st.checkbox("⚡ Show EV Charging Locations Only", value=False)
@@ -489,7 +481,9 @@ with tab1:
         orig_lat, orig_lon = ORIGIN_COORDS[user_origin]
         dest_lat = float(target_hub.get("lat", 26.9124))
         dest_lon = float(target_hub.get("lon", 75.7873))
-        route_path, dist_km, duration_min = get_osrm_route(orig_lat, orig_lon, dest_lat, dest_lon)
+        route_path, dist_km, duration_min, _ = get_osrm_route_with_steps(orig_lat, orig_lon, dest_lat, dest_lon)
+        traffic_segs = build_traffic_colored_segments(route_path, dist_km, duration_min)
+        df_traffic_path = pd.DataFrame(traffic_segs)
         
         st.metric("Shortest Driving Distance", f"{dist_km} km")
         st.metric("Est. Travel Time", f"{duration_min} mins")
@@ -518,14 +512,14 @@ with tab1:
                 auto_highlight=True,
                 elevation_scale=1,
             )
-            route_df = pd.DataFrame([{"path": route_path}])
             path_layer = pdk.Layer(
                 "PathLayer",
-                data=route_df,
+                data=df_traffic_path,
                 get_path="path",
-                get_color=[56, 189, 248, 255],
+                get_color="color",
                 width_min_pixels=6,
-                width_max_pixels=10
+                width_max_pixels=10,
+                pickable=True
             )
             mid_lat = (orig_lat + dest_lat) / 2
             mid_lon = (orig_lon + dest_lon) / 2
@@ -534,7 +528,7 @@ with tab1:
             st.pydeck_chart(pdk.Deck(
                 layers=[column_layer, path_layer],
                 initial_view_state=view_state,
-                tooltip={"html": "<b>{name}</b> ({category})<br/>Free Slots: <b>{available}</b> / {total_slots}<br/>⚡ EV Ports: <b>{ev_slots}</b>"}
+                tooltip={"html": "<b>Segment Traffic: {status}</b><br/>Est. Speed: <b>{speed_kmh} km/h</b>"}
             ))
         else:
             st.warning("No landmarks match your active filter criteria!")
@@ -618,7 +612,7 @@ with tab4:
         c_target = current_hubs[calc_dest]
         c_dest_lat = float(c_target.get("lat", 26.9124))
         c_dest_lon = float(c_target.get("lon", 75.7873))
-        _, trip_dist, trip_time = get_osrm_route(c_orig_lat, c_orig_lon, c_dest_lat, c_dest_lon)
+        _, trip_dist, trip_time, _ = get_osrm_route_with_steps(c_orig_lat, c_orig_lon, c_dest_lat, c_dest_lon)
         est_cost, est_co2 = calculate_trip_impact(trip_dist, vehicle_mode)
         st.metric("Total Distance", f"{trip_dist} km")
         st.metric("Estimated Drive Time", f"{trip_time} mins")
@@ -764,11 +758,9 @@ with tab7:
             seq = sol["sequence"]
             coords_map = sol["coords"]
             
-            # Build polyline for sequence
             path_pts = [[coords_map[name][1], coords_map[name][0]] for name in seq]
             tsp_line_df = pd.DataFrame([{"path": path_pts}])
             
-            # Scatter/Column overlay for stops
             scatter_pts = [{
                 "name": name,
                 "lat": coords_map[name][0],
