@@ -394,7 +394,8 @@ def calculate_trip_impact(dist_km, vehicle_type="Petrol Car"):
 with st.sidebar:
     st.title("⚙️ Map & Network Controls")
     st.subheader("🔍 Live Map Filters")
-    categories = sorted(list(set(h.get("category", "General") for h in current_hubs.values())))
+    current_hubs = locals().get("current_hubs", {})
+categories = sorted(list(set(h.get("category", "General") for h in current_hubs.values())))
     selected_cats = st.multiselect("Filter by Category", categories, default=categories)
     min_free_slots = st.slider("Min. Free Slots Required", 0, 50, 0)
     ev_only = st.checkbox("⚡ Show EV Charging Locations Only", value=False)
