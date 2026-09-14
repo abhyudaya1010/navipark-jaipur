@@ -90,7 +90,7 @@ st.markdown("""
         margin-bottom: 20px;
     }
     div[data-testid="stMetricValue"] {
-        font-size: 1.8rem !important;
+        font-size: 1.5rem !important;
         font-weight: 800 !important;
         color: #38BDF8 !important;
     }
@@ -99,7 +99,7 @@ st.markdown("""
         border: 1px solid rgba(56, 189, 248, 0.2) !important;
         backdrop-filter: blur(16px);
         border-radius: 16px !important;
-        padding: 16px !important;
+        padding: 12px !important;
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
     }
     section[data-testid="stSidebar"] {
@@ -307,7 +307,7 @@ def get_osrm_route_with_steps(start_lat, start_lon, end_lat, end_lon):
                 duration_min = route["duration"] / 60.0
                 legs = route.get("legs", [])
                 steps = legs[0].get("steps", []) if legs else []
-                return coords, round(dist_km, 2), round(duration_min, 1), steps
+                return coords, round(float(dist_km), 2), round(float(duration_min), 1), steps
     except Exception:
         pass
     return [[start_lon, start_lat], [end_lon, end_lat]], 5.0, 12.0, []
@@ -452,7 +452,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
 
 # TAB 1: INTERACTIVE 3D ROUTE MAP & LIVE TELEMETRY
 with tab1:
-    col_map, col_control = st.columns([3, 1])
+    col_map, col_control = st.columns([2.2, 1.8])
     map_data = []
     for h in current_hubs.values():
         tot = h.get("total_slots", 100)
@@ -503,9 +503,9 @@ with tab1:
         st.subheader("📡 Live Journey Telemetry")
         journey_progress = st.slider("Route Progress (%)", 0, 100, 35)
         
-        covered_km = round(dist_km * (journey_progress / 100.0), 2)
-        remaining_km = round(dist_km - covered_km, 2)
-        rem_duration_min = round(duration_min * (1.0 - journey_progress / 100.0), 1)
+        covered_km = round(float(dist_km) * (float(journey_progress) / 100.0), 2)
+        remaining_km = round(float(dist_km) - covered_km, 2)
+        rem_duration_min = round(float(duration_min) * (1.0 - float(journey_progress) / 100.0), 1)
         curr_vehicle_lat, curr_vehicle_lon = get_coords_at_progress(route_path, journey_progress)
         
         mc1, mc2 = st.columns(2)
@@ -833,6 +833,7 @@ with tab7:
             ))
         else:
             st.info("Select 2+ heritage locations on the left and click **Solve TSP Optimal Route**.")
+            
             
             
         
