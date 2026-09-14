@@ -294,8 +294,8 @@ def create_pay_at_venue_reservation(hub_name, fee):
 # ==========================================
 # 4. ROUTE ENGINE & HERITAGE TSP SOLVER
 # ==========================================
-def get_osrm_route(start_lat, start_lon, end_lat, end_lon):
-    url = f"http://router.project-osrm.org/route/v1/driving/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson"
+def get_osrm_route_with_steps(start_lat, start_lon, end_lat, end_lon):
+    url = f"http://router.project-osrm.org/route/v1/driving/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson&steps=true"
     try:
         r = requests.get(url, timeout=4)
         if r.status_code == 200:
@@ -305,36 +305,57 @@ def get_osrm_route(start_lat, start_lon, end_lat, end_lon):
                 coords = route["geometry"]["coordinates"]
                 dist_km = route["distance"] / 1000.0
                 duration_min = route["duration"] / 60.0
-                return coords, round(dist_km, 2), round(duration_min, 1)
+                legs = route.get("legs", [])
+                steps = legs[0].get("steps", []) if legs else []
+                return coords, round(dist_km, 2), round(duration_min, 1), steps
     except Exception:
         pass
-    return [[start_lon, start_lat], [end_lon, end_lat]], 5.0, 12.0
+    return [[start_lon, start_lat], [end_lon, end_lat]], 5.0, 12.0, []
 
-def haversine_dist(lat1, lon1, lat2, lon2):
-    R = 6371.0
-    dlat = np.radians(lat2 - lat1)
-    dlon = np.radians(lon2 - lon1)
-    a = np.sin(dlat / 2)**2 + np.cos(np.radians(lat1)) * np.cos(np.radians(lat2)) * np.sin(dlon / 2)**2
-    return 2 * R * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
-
-def solve_heritage_tsp(stops_coords, start_key):
-    names = list(stops_coords.keys())
-    if start_key in names:
-        names.remove(start_key)
-    best_path = None
-    min_dist = float('inf')
-    for perm in itertools.permutations(names):
-        curr_path = [start_key] + list(perm)
-        d = 0.0
-        for i in range(len(curr_path) - 1):
-            p1 = stops_coords[curr_path[i]]
-            p2 = stops_coords[curr_path[i+1]]
-            d += haversine_dist(p1[0], p1[1], p2[0], p2[1])
-        if d < min_dist:
-            min_dist = d
-            best_path = curr_path
-    return best_path, round(min_dist, 2)
-
+def build_traffic_colored_segments(coords, dist_km, duration_min):
+    """
+    Splits route polyline coordinates into micro-segments and assigns traffic colors
+    based on overall speed ratio + time-of-day Jaipur corridor heuristics.
+    """
+    if len(coords) < 2:
+        return []
+    
+    avg_speed_kmh = (dist_km / (duration_min / 60.0)) if duration_min > 0 else 25.0
+    now_hour = datetime.datetime.now().hour
+    # Peak hour penalty for old city / arterial corridors
+    is_peak = (11 <= now_hour <= 14) or (18 <= now_hour <= 21)
+    
+    segments = []
+    n = len(coords)
+    chunk_size = max(1, n // 8)
+    
+    for i in range(0, n - 1, chunk_size):
+        end_idx = min(n, i + chunk_size + 1)
+        sub_path = coords[i:end_idx]
+        if len(sub_path) < 2:
+            continue
+            
+        # Simulate segment-level variation weighted by peak hours
+        jitter_factor = random.uniform(0.7, 1.3)
+        effective_speed = avg_speed_kmh * jitter_factor * (0.75 if is_peak else 1.05)
+        
+        if effective_speed > 30.0:
+            color = [16, 185, 129, 255]    # Green
+            status = "Free Flow"
+        elif effective_speed >= 15.0:
+            color = [245, 158, 11, 255]   # Amber/Yellow
+            status = "Moderate Traffic"
+        else:
+            color = [239, 68, 68, 255]    # Red / Congested
+            status = "Heavy Congestion"
+            
+        segments.append({
+            "path": sub_path,
+            "color": color,
+            "status": status,
+            "speed_kmh": round(effective_speed, 1)
+        })
+    return segments
 def calculate_trip_impact(dist_km, vehicle_type="Petrol Car"):
     if vehicle_type == "EV":
         cost, co2_kg = dist_km * 1.5, 0.0
