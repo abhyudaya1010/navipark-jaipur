@@ -1,6 +1,12 @@
-# navipark-jaipur
 # 🚘 NaviPark 3D Jaipur Pro
-Smart mobility, live OSRM corridor routing, ML occupancy prediction, EV POI discovery, and multi-stop heritage TSP solver for Jaipur.
+> Smart mobility, live OSRM corridor routing, ML occupancy prediction, EV POI discovery, and multi-stop heritage TSP solver for Jaipur.
+
+| Metric / Scope | Spec |
+| :--- | :--- |
+| **Coverage** | Jaipur (JL Marg, WTP, GT, Amer, Albert Hall) |
+| **Routing** | OSRM API + Haversine combinatorial TSP (`N!`) |
+| **Forecasting** | Scikit-Learn `RandomForestRegressor` (diurnal curves) |
+| **Resilience** | Zero-config automatic fallback to mock telemetry |
 
 ## Architecture & Stack
 * **UI/PWA**: Streamlit + Glassmorphism UI + Custom PWA Manifest/Service Worker shim
