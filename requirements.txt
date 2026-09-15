@@ -1,9 +1,6 @@
-streamlit
-streamlit-components-v1
-pydeck
-qrcode
-requests
+streamlit>=1.32.0
 pandas
 numpy
-scikit-learn
+plotly
+requests
 supabase
