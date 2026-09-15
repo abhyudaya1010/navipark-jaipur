@@ -339,7 +339,11 @@ def build_traffic_colored_segments(coords, dist_km, duration_min):
             "color": color,
             "status": status,
             "speed_kmh": round(effective_speed, 1),
-            "name": f"Traffic Corridor ({status})"
+            "name": f"Traffic Corridor ({status})",
+            "category": "Traffic Corridor",
+            "available": "-",
+            "total_slots": "-",
+            "ev_slots": "-"
         })
     return segments
 
@@ -483,7 +487,9 @@ with tab1:
             "total_slots": tot,
             "available": available,
             "ev_slots": ev_slots,
-            "color": color
+            "color": color,
+            "status": "Active Hub",
+            "speed_kmh": "—"
         })
     df_map = pd.DataFrame(map_data)
     
@@ -549,7 +555,7 @@ with tab1:
             )
             vehicle_layer = pdk.Layer(
                 "ScatterplotLayer",
-                data=[{"lat": curr_vehicle_lat, "lon": curr_vehicle_lon, "progress": journey_progress, "name": "Active Vehicle"}],
+                data=[{"lat": curr_vehicle_lat, "lon": curr_vehicle_lon, "progress": journey_progress, "name": "Active Vehicle", "category": "Vehicle", "available": "-", "total_slots": "-", "ev_slots": "-", "status": "Moving", "speed_kmh": "—"}],
                 get_position=["lon", "lat"],
                 get_color=[56, 189, 248, 255],
                 get_radius=280,
@@ -566,17 +572,18 @@ with tab1:
             
             tooltip_config = {
                 "html": """
-                    <div style='background:rgba(15,23,42,0.9); padding:8px 12px; border-radius:8px; color:#F8FAFC; font-family:sans-serif;'>
-                        <b>{name}</b><br/>
+                    <div style='background:rgba(15,23,42,0.92); padding:10px 14px; border-radius:10px; color:#F8FAFC; font-family:sans-serif; border: 1px solid rgba(56,189,248,0.3);'>
+                        <b style='color:#38BDF8;'>{name}</b><br/>
                         Category: {category}<br/>
                         Free Slots: {available} / {total_slots}<br/>
                         EV Ports: {ev_slots}<br/>
-                        Traffic: {status} {speed_kmh}
+                        Traffic / Status: {status} {speed_kmh}
                     </div>
                 """,
                 "style": {"background": "transparent", "border": "none", "box-shadow": "none"}
             }
 
+            combined_df = pd.concat([df_map, df_traffic_path], ignore_index=True)
             st.pydeck_chart(pdk.Deck(
                 layers=[path_layer, column_layer, vehicle_layer],
                 initial_view_state=view_state,
@@ -811,10 +818,16 @@ with tab7:
             coords_map = sol["coords"]
             
             path_pts = [[coords_map[name][1], coords_map[name][0]] for name in seq]
-            tsp_line_df = pd.DataFrame([{"path": path_pts}])
+            tsp_line_df = pd.DataFrame([{"path": path_pts, "name": "TSP Route Path", "category": "Heritage Circuit", "available": "-", "total_slots": "-", "ev_slots": "-", "status": "Optimized", "speed_kmh": "—"}])
             
             scatter_pts = [{
                 "name": name,
+                "category": "Heritage Stop",
+                "available": "-",
+                "total_slots": "-",
+                "ev_slots": "-",
+                "status": f"Stop #{seq.index(name) + 1}",
+                "speed_kmh": "—",
                 "lat": coords_map[name][0],
                 "lon": coords_map[name][1],
                 "order_idx": seq.index(name) + 1
@@ -826,7 +839,8 @@ with tab7:
                 data=tsp_line_df,
                 get_path="path",
                 get_color=[192, 132, 252, 255],
-                width_min_pixels=5
+                width_min_pixels=5,
+                pickable=True
             )
             
             scatter_layer = pdk.Layer(
@@ -840,13 +854,25 @@ with tab7:
             
             first_coords = coords_map[seq[0]]
             view_state_tsp = pdk.ViewState(latitude=first_coords[0], longitude=first_coords[1], zoom=12, pitch=30)
+            
+            tooltip_config_tsp = {
+                "html": """
+                    <div style='background:rgba(15,23,42,0.92); padding:10px 14px; border-radius:10px; color:#F8FAFC; font-family:sans-serif;'>
+                        <b style='color:#C084FC;'>{name}</b><br/>
+                        Tour Status: {status}
+                    </div>
+                """,
+                "style": {"background": "transparent", "border": "none", "box-shadow": "none"}
+            }
+
             st.pydeck_chart(pdk.Deck(
                 layers=[line_layer, scatter_layer],
                 initial_view_state=view_state_tsp,
-                tooltip={"html": "<b>Stop #{order_idx}</b><br/>{name}"}
+                tooltip=tooltip_config_tsp
             ))
         else:
             st.info("Select 2+ heritage locations on the left and click **Solve TSP Optimal Route**.")
+            
             
             
             
