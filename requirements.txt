@@ -1,6 +1,7 @@
 streamlit
+streamlit-components-v1
 pydeck
-qrcode[pil]
+qrcode
 requests
 pandas
 numpy
